@@ -1,0 +1,167 @@
+// ===========================================================================
+// summer-goals — Prisma スキーマ
+// 「ガチ」目標達成マッチングアプリ MVP のデータモデル
+// docs/DESIGN.md の「1. データベース設計」に対応
+// ===========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- enum ----------------------------------------------------------------
+
+enum GoalGenre {
+  ENGLISH // 英語学習
+  MUSCLE_TRAINING // 筋トレ
+  STUDY // 勉強・資格
+  READING // 読書
+  DIET // ダイエット
+  OTHER // その他
+}
+
+enum GoalStatus {
+  MATCHING // 相手待ち（マッチングプール）
+  ACTIVE // ペア成立・進行中
+  COMPLETED // 期間満了
+  CANCELLED // 取消・退会
+}
+
+enum MatchStatus {
+  ACTIVE
+  ENDED
+}
+
+enum PenaltyStatus {
+  PENDING // 判定済み・未決済
+  CHARGED // Stripe 決済成功
+  CHARGE_FAILED // 決済失敗（カード拒否等）
+  SKIPPED // 課金対象外（両者報告 or 両者未報告）
+}
+
+enum GiftStatus {
+  NONE // ギフト対象外
+  PENDING // 発行待ち
+  ISSUED // 発行済み
+  FAILED // 発行失敗（手動キューへ）
+}
+
+// ---- モデル ---------------------------------------------------------------
+
+/// アプリ利用者。Supabase Auth のユーザーと email で 1:1 に対応する。
+model User {
+  id                     String   @id @default(uuid())
+  email                  String   @unique
+  displayName            String // 匿名ニックネーム（本名禁止）
+  avatarSeed             String // アバター生成用シード（匿名性担保）
+  stripeCustomerId       String?  @unique
+  defaultPaymentMethodId String? // SetupIntent で保存した支払い方法
+  cardRegistered         Boolean  @default(false)
+  timezone               String   @default("Asia/Tokyo")
+  status                 String   @default("ACTIVE")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  goals             Goal[]
+  reports           Report[]
+  matchesAsA        Match[]   @relation("MatchUserA")
+  matchesAsB        Match[]   @relation("MatchUserB")
+  penaltiesGiven    Penalty[] @relation("PenaltyFrom") // サボって課金された
+  penaltiesReceived Penalty[] @relation("PenaltyTo") // 達成してギフト受領
+}
+
+/// ユーザーが設定する目標。genre がマッチングのキーになる。
+model Goal {
+  id            String     @id @default(uuid())
+  userId        String
+  genre         GoalGenre
+  title         String
+  description   String?
+  dailyDeadline String     @default("23:59") // 締切時刻(JST)
+  periodStart   DateTime   @db.Date
+  periodEnd     DateTime   @db.Date
+  status        GoalStatus @default(MATCHING)
+  createdAt     DateTime   @default(now())
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchAsGoalA Match? @relation("MatchGoalA")
+  matchAsGoalB Match? @relation("MatchGoalB")
+
+  @@index([genre, status]) // マッチング探索用
+  @@index([userId])
+}
+
+/// 成立したペア。2人のユーザーと、それぞれの目標を結びつける。
+model Match {
+  id        String      @id @default(uuid())
+  genre     GoalGenre
+  userAId   String
+  userBId   String
+  goalAId   String      @unique // 1目標1マッチ
+  goalBId   String      @unique
+  status    MatchStatus @default(ACTIVE)
+  startedAt DateTime    @db.Date // 進捗判定の起点（通常は成立翌日）
+  endedAt   DateTime?   @db.Date
+  createdAt DateTime    @default(now())
+
+  userA     User      @relation("MatchUserA", fields: [userAId], references: [id])
+  userB     User      @relation("MatchUserB", fields: [userBId], references: [id])
+  goalA     Goal      @relation("MatchGoalA", fields: [goalAId], references: [id])
+  goalB     Goal      @relation("MatchGoalB", fields: [goalBId], references: [id])
+  reports   Report[]
+  penalties Penalty[]
+
+  @@index([status])
+}
+
+/// 毎日の進捗報告（テキスト + 写真）。1日1報告に制限する。
+model Report {
+  id          String   @id @default(uuid())
+  matchId     String
+  userId      String
+  reportDate  DateTime @db.Date // 対象日(JST)
+  textContent String
+  photoUrl    String? // Supabase Storage の URL
+  createdAt   DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([matchId, userId, reportDate]) // 1日1報告・冪等性の核
+  @@index([matchId, reportDate])
+}
+
+/// ペナルティ決済 & ギフト付与の1レコード（サボり1件 = 1行）。
+model Penalty {
+  id                    String        @id @default(uuid())
+  matchId               String
+  reportDate            DateTime      @db.Date // 判定対象日
+  fromUserId            String // サボった側（課金される）
+  toUserId              String // 達成した相方（ギフト受領）
+  amount                Int           @default(500) // 円
+  stripePaymentIntentId String?
+  penaltyStatus         PenaltyStatus @default(PENDING)
+  giftStatus            GiftStatus    @default(NONE)
+  giftProvider          String?
+  giftCode              String?
+  createdAt             DateTime      @default(now())
+
+  match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  fromUser User  @relation("PenaltyFrom", fields: [fromUserId], references: [id])
+  toUser   User  @relation("PenaltyTo", fields: [toUserId], references: [id])
+
+  // バッチ二重実行でも二重課金しないための冪等キー
+  @@unique([matchId, fromUserId, reportDate])
+  @@index([penaltyStatus])
+}
+
+/// Stripe Webhook の冪等処理用。重複イベントを弾く。
+model WebhookEvent {
+  id          String   @id // Stripe の event id
+  type        String
+  processedAt DateTime @default(now())
+}
