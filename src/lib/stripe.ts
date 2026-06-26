@@ -14,4 +14,9 @@ export const stripe = new Stripe(secretKey ?? "sk_test_placeholder", {
   typescript: true,
 });
 
-export const PENALTY_AMOUNT_JPY = Number(process.env.PENALTY_AMOUNT_JPY ?? 500);
+// デポジット返金モデルの金額定数（JPY はゼロ桁通貨 = 円そのまま）。
+export const SYSTEM_FEE_YEN = Number(process.env.SYSTEM_FEE_YEN ?? 500); // 返金不可
+export const DEPOSIT_YEN = Number(process.env.DEPOSIT_YEN ?? 3000); // 日割返金可（返金上限）
+export const TOTAL_CHARGE_YEN = SYSTEM_FEE_YEN + DEPOSIT_YEN; // 前払い総額 = 3500
+export const DAILY_FORFEIT_YEN = Number(process.env.DAILY_FORFEIT_YEN ?? 100); // サボり1日の失効額
+export const CHALLENGE_DURATION_DAYS = Number(process.env.CHALLENGE_DURATION_DAYS ?? 30);

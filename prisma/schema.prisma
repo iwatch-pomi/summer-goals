@@ -36,18 +36,24 @@ enum MatchStatus {
   ENDED
 }
 
-enum PenaltyStatus {
-  PENDING // 判定済み・未決済
-  CHARGED // Stripe 決済成功
-  CHARGE_FAILED // 決済失敗（カード拒否等）
-  SKIPPED // 課金対象外（両者報告 or 両者未報告）
+enum ChallengePaymentStatus {
+  PENDING // 未決済
+  PAID // ¥3,500 決済成功
+  FAILED // 決済失敗
 }
 
-enum GiftStatus {
-  NONE // ギフト対象外
-  PENDING // 発行待ち
-  ISSUED // 発行済み
-  FAILED // 発行失敗（手動キューへ）
+enum ChallengeStatus {
+  AWAITING_PAYMENT // 決済待ち
+  ACTIVE // 有料会員・チャレンジ進行中
+  SETTLED // 精算（返金）完了
+  CANCELLED // 取消
+}
+
+enum SettlementStatus {
+  PENDING // 未精算
+  REFUNDED // 部分返金済み
+  NO_REFUND // 返金額0（全サボり）
+  REFUND_FAILED // 返金失敗（次回再実行）
 }
 
 // ---- モデル ---------------------------------------------------------------
@@ -58,20 +64,20 @@ model User {
   email                  String   @unique
   displayName            String // 匿名ニックネーム（本名禁止）
   avatarSeed             String // アバター生成用シード（匿名性担保）
-  stripeCustomerId       String?  @unique
+  stripeCustomerId       String?  @unique // ユーザーごとの Stripe Customer ID
   defaultPaymentMethodId String? // SetupIntent で保存した支払い方法
   cardRegistered         Boolean  @default(false)
+  paidMember             Boolean  @default(false) // ¥3,500 決済成功で有料会員（アクティブ）
   timezone               String   @default("Asia/Tokyo")
   status                 String   @default("ACTIVE")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  goals             Goal[]
-  reports           Report[]
-  matchesAsA        Match[]   @relation("MatchUserA")
-  matchesAsB        Match[]   @relation("MatchUserB")
-  penaltiesGiven    Penalty[] @relation("PenaltyFrom") // サボって課金された
-  penaltiesReceived Penalty[] @relation("PenaltyTo") // 達成してギフト受領
+  goals      Goal[]
+  reports    Report[]
+  challenges Challenge[]
+  matchesAsA Match[]     @relation("MatchUserA")
+  matchesAsB Match[]     @relation("MatchUserB")
 }
 
 /// ユーザーが設定する目標。genre がマッチングのキーになる。
@@ -110,53 +116,74 @@ model Match {
 
   userA     User      @relation("MatchUserA", fields: [userAId], references: [id])
   userB     User      @relation("MatchUserB", fields: [userBId], references: [id])
-  goalA     Goal      @relation("MatchGoalA", fields: [goalAId], references: [id])
-  goalB     Goal      @relation("MatchGoalB", fields: [goalBId], references: [id])
-  reports   Report[]
-  penalties Penalty[]
+  goalA   Goal     @relation("MatchGoalA", fields: [goalAId], references: [id])
+  goalB   Goal     @relation("MatchGoalB", fields: [goalBId], references: [id])
+  reports Report[]
 
   @@index([status])
 }
 
 /// 毎日の進捗報告（テキスト + 写真）。1日1報告に制限する。
+/// 報告有無のフラグ = 当該日に行が存在するか。タイムスタンプ = createdAt(JST)。
 model Report {
   id          String   @id @default(uuid())
   matchId     String
   userId      String
+  challengeId String? // 成功日数カウントを Challenge に直結
   reportDate  DateTime @db.Date // 対象日(JST)
   textContent String
   photoUrl    String? // Supabase Storage の URL
   createdAt   DateTime @default(now())
 
-  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
+  match     Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id])
+  challenge Challenge? @relation(fields: [challengeId], references: [id])
 
   @@unique([matchId, userId, reportDate]) // 1日1報告・冪等性の核
   @@index([matchId, reportDate])
+  @@index([challengeId, reportDate]) // 成功日数の集計用
 }
 
-/// ペナルティ決済 & ギフト付与の1レコード（サボり1件 = 1行）。
-model Penalty {
-  id                    String        @id @default(uuid())
-  matchId               String
-  reportDate            DateTime      @db.Date // 判定対象日
-  fromUserId            String // サボった側（課金される）
-  toUserId              String // 達成した相方（ギフト受領）
-  amount                Int           @default(500) // 円
-  stripePaymentIntentId String?
-  penaltyStatus         PenaltyStatus @default(PENDING)
-  giftStatus            GiftStatus    @default(NONE)
-  giftProvider          String?
-  giftCode              String?
-  createdAt             DateTime      @default(now())
+/// デポジット = 決済・返金の管理単位。ユーザー1人の1チャレンジ（例: 8月）= 1レコード。
+/// Stripe の Charge/PaymentIntent と返金計算をここに集約する。
+model Challenge {
+  id     String @id @default(uuid())
+  userId String
 
-  match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  fromUser User  @relation("PenaltyFrom", fields: [fromUserId], references: [id])
-  toUser   User  @relation("PenaltyTo", fields: [toUserId], references: [id])
+  // 期間
+  startDate    DateTime @db.Date // 例 2026-08-01
+  endDate      DateTime @db.Date // 例 2026-08-30（30日間）
+  durationDays Int      @default(30)
 
-  // バッチ二重実行でも二重課金しないための冪等キー
-  @@unique([matchId, fromUserId, reportDate])
-  @@index([penaltyStatus])
+  // 金額（JPY=ゼロ桁通貨。値は円そのもの）
+  systemFeeYen    Int @default(500) // 返金不可（参加費）
+  depositYen      Int @default(3000) // 日割返金可（返金の上限）
+  totalChargedYen Int @default(3500) // 前払い総額
+  dailyForfeitYen Int @default(100) // サボり1日あたり失効額
+
+  // Stripe（返金時に必要な ID を保持）
+  stripePaymentIntentId String?                @unique
+  stripeChargeId        String? // latest_charge。返金で使用
+  paymentStatus         ChallengePaymentStatus @default(PENDING)
+  paidAt                DateTime?
+
+  // 精算（返金計算用カラム）
+  successDays      Int              @default(0) // 報告成功日数
+  refundAmountYen  Int              @default(0) // = min(successDays*100, depositYen)
+  forfeitedYen     Int              @default(0) // = depositYen - refundAmountYen
+  stripeRefundId   String?
+  settlementStatus SettlementStatus @default(PENDING)
+  settledAt        DateTime?
+
+  status    ChallengeStatus @default(AWAITING_PAYMENT)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@index([status, settlementStatus]) // 月末バッチ抽出用
+  @@index([userId])
 }
 
 /// Stripe Webhook の冪等処理用。重複イベントを弾く。

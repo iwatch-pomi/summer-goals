@@ -79,10 +79,11 @@ Vercel の **Project → Settings → Environment Variables** に、以下を1�
 | `STRIPE_SECRET_KEY` | Stripe API keys | ◯ |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe API keys | |
 | `STRIPE_WEBHOOK_SECRET` | Stripe Webhook | ◯ |
-| `PENALTY_AMOUNT_JPY` | `500` | |
+| `SYSTEM_FEE_YEN` | `500`（参加費・返金不可）| |
+| `DEPOSIT_YEN` | `3000`（デポジット・返金上限）| |
+| `DAILY_FORFEIT_YEN` | `100`（サボり1日の失効額）| |
+| `CHALLENGE_DURATION_DAYS` | `30` | |
 | `CRON_SECRET` | 自分で長いランダム文字列を決める | ◯ |
-| `GIFT_PROVIDER` | `manual`（最初はこれ）| |
-| `GIFT_API_KEY` | ギフト契約後に設定（最初は空でOK）| ◯ |
 | `NEXT_PUBLIC_APP_URL` | 公開URL（例 `https://...vercel.app`）| |
 | `APP_TIMEZONE` | `Asia/Tokyo` | |
 
@@ -102,25 +103,30 @@ npx prisma migrate deploy   # 本番DBにテーブルを作成
 
 ---
 
-## 5. 日次バッチ（サボり判定）について
+## 5. 月末の部分返金バッチについて
 
 - `vercel.json` に設定済みで、**毎日 00:10 JST** に自動実行されます（Vercel Cron）。
+- 返金対象は「チャレンジ終了日（`endDate`）を過ぎた参加者」だけなので、実質 **8月末に1回** 精算されます。
 - Vercel が `CRON_SECRET` を使って安全に起動します。追加設定は不要です。
-- 手動で動作確認したいときは、開発者に次を実行してもらってください:
+- 手動で動作確認したいときは、開発者に次のいずれかを実行してもらってください:
 
 ```bash
+# API 経由（基準日を指定して検証）
 curl -H "Authorization: Bearer <CRON_SECRET>" \
-  "https://あなたのアプリ.vercel.app/api/cron/daily-penalty?date=2026-08-10"
+  "https://あなたのアプリ.vercel.app/api/cron/settlement?now=2026-08-31"
+
+# もしくはスクリプト直接実行
+STRIPE_SECRET_KEY=sk_test_xxx DATABASE_URL=... npm run settle
 ```
 
 ---
 
-## 6. ギフト発行について
+## 6. 返金の仕組み（運営向けメモ）
 
-- MVP の既定は `GIFT_PROVIDER=manual`。これは「サボりが発生したら運営が手動で
-  相方にギフトを送る」モードです。まずはこれで運用を始められます。
-- giftee などの eGift API を契約したら、`GIFT_PROVIDER=giftee` に変更し
-  `GIFT_API_KEY` を設定、`src/lib/gift.ts` の `issueViaGiftee` を実装すれば自動化できます。
+- 8月開始時に **¥3,500 を即時決済**（参加費 ¥500＋デポジット ¥3,000）。オーソリ保留ではなく **必ずキャプチャ** されます（保留は約7日で失効し30日保持できないため）。
+- 月末に **¥100 × 報告成功日数**（上限 ¥3,000）を Stripe の Partial Refund で返金します。
+- 失効分（サボった日数 × ¥100）＋ 参加費 ¥500 が運営の売上です。
+- 同じチャレンジに二重返金は発生しません（`idempotencyKey` で保護）。
 
 ---
 

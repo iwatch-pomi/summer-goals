@@ -52,12 +52,41 @@ export async function POST(req: NextRequest) {
       }
       break;
     }
-    case "payment_intent.payment_failed": {
-      // ペナルティ決済の失敗。再請求/通知のフックを置く場所。
+    case "payment_intent.succeeded": {
+      // フロー2: ¥3,500 の前払い成功 → 有料会員（アクティブ）化。
       const pi = event.data.object as Stripe.PaymentIntent;
-      const penaltyId = pi.metadata?.penaltyId;
-      if (penaltyId) {
-        console.warn(`[webhook] payment failed for penalty ${penaltyId}`);
+      if (pi.metadata?.kind === "enrollment" && pi.metadata?.challengeId) {
+        // 返金で使う Charge ID を保持（latest_charge）。
+        const chargeId =
+          typeof pi.latest_charge === "string"
+            ? pi.latest_charge
+            : pi.latest_charge?.id ?? null;
+
+        await prisma.challenge.update({
+          where: { id: pi.metadata.challengeId },
+          data: {
+            paymentStatus: "PAID",
+            status: "ACTIVE",
+            stripeChargeId: chargeId,
+            paidAt: new Date(),
+          },
+        });
+        if (pi.metadata.userId) {
+          await prisma.user.update({
+            where: { id: pi.metadata.userId },
+            data: { paidMember: true }, // ★有料会員アクティブ
+          });
+        }
+      }
+      break;
+    }
+    case "payment_intent.payment_failed": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      if (pi.metadata?.kind === "enrollment" && pi.metadata?.challengeId) {
+        await prisma.challenge.update({
+          where: { id: pi.metadata.challengeId },
+          data: { paymentStatus: "FAILED" },
+        });
       }
       break;
     }

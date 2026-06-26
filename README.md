@@ -3,7 +3,7 @@
 **「ガチ」目標達成マッチングアプリ** — 夏休み限定（8月〜9月）で大学生向けに提供する MVP。
 
 本気で目標を達成したい見知らぬ大学生同士を **匿名でペアリング** し、毎日の進捗報告を義務化。
-サボると **¥500** がサボった側から決済され、毎日達成している相方に **デジタルギフト** が自動付与される（ペナルティ奢り合いモデル）。
+**デポジット返金モデル**: 8月開始時に **¥3,500 を前払い**（参加費 ¥500【返金不可】＋ デポジット ¥3,000【日割返金可】）。サボると1日 **¥100 が失効**し、月末に **¥100 × 報告成功日数** を Stripe 部分返金。失効分＋参加費が運営利益。
 
 ## ドキュメント
 
@@ -17,18 +17,20 @@ Next.js 14 (App Router) + TypeScript / Prisma + PostgreSQL(Supabase) / Supabase 
 ## プロジェクト構成
 
 ```
-prisma/schema.prisma          # データモデル（DB設計の正）
+prisma/schema.prisma          # データモデル（DB設計の正。Challenge=デポジット）
 src/lib/                       # サービス層
   prisma.ts  stripe.ts  supabase.ts  auth.ts  dates.ts
   matching.ts                  # マッチングロジック
-  penalty.ts                   # 日次バッチ（サボり判定→決済→ギフト）
-  gift.ts                      # ギフト発行アダプタ（manual / giftee）
+  settlement.ts                # 月末バッチ（成功日数集計→部分返金）
 src/app/                       # 画面
   page.tsx signup/ card/ goals/new/ dashboard/ report/
 src/app/api/                   # API ルート
-  stripe/setup  stripe/webhook  goals  reports  cron/daily-penalty
+  stripe/setup  stripe/webhook  goals  reports
+  challenges/enroll            # ¥3,500 前払い（PaymentIntent 即時 Capture）
+  cron/settlement              # 月末の部分返金バッチ
+scripts/settle-refunds.ts      # 返金バッチの単体実行スクリプト
 public/                        # PWA: manifest.json, sw.js, icons/
-vercel.json                    # 日次バッチの Cron 設定（00:10 JST）
+vercel.json                    # Cron 設定（00:10 JST。endDate 経過後に精算）
 ```
 
 ## ローカル開発（開発者向け）
