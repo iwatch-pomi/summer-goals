@@ -106,18 +106,32 @@ npx prisma migrate deploy   # 本番DBにテーブルを作成
 ## 5. 月末の部分返金バッチについて
 
 - `vercel.json` に設定済みで、**毎日 00:10 JST** に自動実行されます（Vercel Cron）。
-- 返金対象は「チャレンジ終了日（`endDate`）を過ぎた参加者」だけなので、実質 **8月末に1回** 精算されます。
+- 返金対象は「チャレンジ終了日（`endDate`）を過ぎた参加者」だけなので、実質 **8月末から** 精算が始まります。
 - Vercel が `CRON_SECRET` を使って安全に起動します。追加設定は不要です。
-- 手動で動作確認したいときは、開発者に次のいずれかを実行してもらってください:
+
+### 無料（Hobby）枠での安全設計
+
+Vercel の無料プランは関数の実行が **60秒** までです。返金は1件ずつ Stripe を呼ぶため、参加者が多いと60秒を超えるおそれがあります。そこで本バッチは:
+
+- 1回の実行で **最大 `SETTLEMENT_PAGE_SIZE` 件（既定40）＋約50秒** で打ち切り、
+- 残りは翌日の Cron が**続きから自動処理**します（処理済みは対象から外れるので二重返金なし）。
+
+つまり参加者が多くても、**毎日のCronで数日かけて全員に返金が完了**します（返金は急ぎではないので問題ありません）。`SETTLEMENT_PAGE_SIZE` を変えれば1回の件数を調整できます。
+
+### 今すぐ全員分を精算したいとき（手動）
+
+開発できる人に次のいずれかを実行してもらえば、その場で全件処理できます:
 
 ```bash
-# API 経由（基準日を指定して検証）
+# スクリプト直接実行（時間制限なし。残りが無くなるまで全ページ処理）
+STRIPE_SECRET_KEY=sk_test_xxx DATABASE_URL=... npm run settle
+
+# もしくは API 経由（1ページ分。基準日を指定して検証）
 curl -H "Authorization: Bearer <CRON_SECRET>" \
   "https://あなたのアプリ.vercel.app/api/cron/settlement?now=2026-08-31"
-
-# もしくはスクリプト直接実行
-STRIPE_SECRET_KEY=sk_test_xxx DATABASE_URL=... npm run settle
 ```
+
+> Pro プランにすると1回で大量処理できます（`SETTLEMENT_PAGE_SIZE` を大きくし、`src/app/api/cron/settlement/route.ts` の `maxDuration` を延ばす）。MVP は無料枠＋上記設計で十分です。
 
 ---
 

@@ -11,6 +11,11 @@ import { stripe } from "./stripe";
 //
 // JPY はゼロ桁通貨のため amount は「円そのまま」。
 // 二重返金は idempotencyKey + settlementStatus で防止する。
+//
+// ★ Vercel Hobby（関数60秒上限）対策:
+//   runSettlement は「ページ単位（limit）＋時間予算（timeBudgetMs）」で処理する。
+//   処理済みは settlementStatus が PENDING から外れるため、残りは次回呼び出しで
+//   自然に続きから処理される（オフセット不要・重複なし）。hasMore で残有無を返す。
 // ===========================================================================
 
 export interface SettlementSummary {
@@ -19,12 +24,18 @@ export interface SettlementSummary {
   noRefund: number;
   failed: number;
   totalRefundedYen: number;
+  hasMore: boolean; // まだ未精算のチャレンジが残っている可能性があるか
+}
+
+export interface SettleChallengeResult {
+  status: "REFUNDED" | "NO_REFUND" | "REFUND_FAILED" | "SKIPPED";
+  refundAmountYen: number;
 }
 
 /** 1 チャレンジ分の精算（返金）を実行する。 */
-export async function settleChallenge(challengeId: string): Promise<
-  "REFUNDED" | "NO_REFUND" | "REFUND_FAILED" | "SKIPPED"
-> {
+export async function settleChallenge(
+  challengeId: string
+): Promise<SettleChallengeResult> {
   const c = await prisma.challenge.findUnique({ where: { id: challengeId } });
   if (
     !c ||
@@ -32,7 +43,7 @@ export async function settleChallenge(challengeId: string): Promise<
     c.settlementStatus !== SettlementStatus.PENDING ||
     c.paymentStatus !== "PAID"
   ) {
-    return "SKIPPED";
+    return { status: "SKIPPED", refundAmountYen: 0 };
   }
 
   // 報告成功日数 = 期間内の distinct な報告日数。
@@ -84,22 +95,42 @@ export async function settleChallenge(challengeId: string): Promise<
       },
     });
 
-    return refundAmount > 0 ? "REFUNDED" : "NO_REFUND";
+    return {
+      status: refundAmount > 0 ? "REFUNDED" : "NO_REFUND",
+      refundAmountYen: refundAmount,
+    };
   } catch (err) {
     await prisma.challenge.update({
       where: { id: c.id },
       data: { settlementStatus: SettlementStatus.REFUND_FAILED },
     });
     console.error(`[settlement] refund failed for ${c.id}:`, err);
-    return "REFUND_FAILED";
+    return { status: "REFUND_FAILED", refundAmountYen: 0 };
   }
 }
 
+export interface RunSettlementOptions {
+  /** 1回の呼び出しで処理する最大件数（既定 50）。 */
+  limit?: number;
+  /** 経過時間がこれを超えたら処理を打ち切る（ミリ秒。既定: 無制限）。 */
+  timeBudgetMs?: number;
+}
+
 /**
- * 期間終了済みの全 ACTIVE チャレンジを精算する。
+ * 期間終了済みの ACTIVE チャレンジを精算する（1ページ分）。
+ * - `limit` 件まで処理し、`timeBudgetMs` を超えたら途中で打ち切る。
+ * - 残りがあれば `hasMore=true`。処理済みは PENDING から外れるので、
+ *   再度呼べば続きから処理される（オフセット不要・重複なし）。
  * @param now 基準日時（既定: 現在）。endDate <= now のものが対象。
  */
-export async function runSettlement(now: Date = new Date()): Promise<SettlementSummary> {
+export async function runSettlement(
+  now: Date = new Date(),
+  options: RunSettlementOptions = {}
+): Promise<SettlementSummary> {
+  const limit = options.limit ?? 50;
+  const timeBudgetMs = options.timeBudgetMs ?? Number.POSITIVE_INFINITY;
+  const startedAt = Date.now();
+
   const targets = await prisma.challenge.findMany({
     where: {
       status: ChallengeStatus.ACTIVE,
@@ -107,6 +138,8 @@ export async function runSettlement(now: Date = new Date()): Promise<SettlementS
       paymentStatus: "PAID",
       endDate: { lte: now },
     },
+    orderBy: { createdAt: "asc" },
+    take: limit,
     select: { id: true },
   });
 
@@ -116,24 +149,29 @@ export async function runSettlement(now: Date = new Date()): Promise<SettlementS
     noRefund: 0,
     failed: 0,
     totalRefundedYen: 0,
+    hasMore: false,
   };
 
+  let brokeEarly = false;
   for (const t of targets) {
+    // 時間予算を超えたら打ち切り（残りは次回呼び出しで継続）。
+    if (Date.now() - startedAt > timeBudgetMs) {
+      brokeEarly = true;
+      break;
+    }
+    const r = await settleChallenge(t.id);
     summary.evaluated += 1;
-    const result = await settleChallenge(t.id);
-    if (result === "REFUNDED") {
+    if (r.status === "REFUNDED") {
       summary.refunded += 1;
-      const c = await prisma.challenge.findUnique({
-        where: { id: t.id },
-        select: { refundAmountYen: true },
-      });
-      summary.totalRefundedYen += c?.refundAmountYen ?? 0;
-    } else if (result === "NO_REFUND") {
+      summary.totalRefundedYen += r.refundAmountYen;
+    } else if (r.status === "NO_REFUND") {
       summary.noRefund += 1;
-    } else if (result === "REFUND_FAILED") {
+    } else if (r.status === "REFUND_FAILED") {
       summary.failed += 1;
     }
   }
 
+  // フルページ取得 or 時間切れ → まだ残っている可能性あり。
+  summary.hasMore = brokeEarly || targets.length === limit;
   return summary;
 }

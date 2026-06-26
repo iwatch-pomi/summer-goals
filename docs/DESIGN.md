@@ -185,6 +185,8 @@ Match 1─N Report ─N─1 Challenge
 4. **確定**: `successDays / refundAmountYen / forfeitedYen / stripeRefundId` を保存し `status=SETTLED`。失敗時は `REFUND_FAILED`（idempotencyKey により再実行しても二重返金なし）。
 5. **冪等性の三重防御**: ① `Challenge.stripePaymentIntentId` の unique ② Stripe `idempotencyKey` ③ `WebhookEvent` 重複排除。
 
+**Vercel Hobby（60秒上限）対応のページング**: `runSettlement(now, { limit, timeBudgetMs })` が1回の呼び出しを「最大 `SETTLEMENT_PAGE_SIZE` 件＋約50秒」で打ち切る。処理済みは `settlementStatus` が `PENDING` から外れるため、残りは翌日以降の Cron が続きから処理する（オフセット不要・重複なし。`hasMore` で残有無を返却）。手動の `scripts/settle-refunds.ts`（`npm run settle`）は時間無制限で全ページをループし、その場で全件精算する。
+
 ---
 
 ## 3. フェーズ別開発ロードマップ（4週間）

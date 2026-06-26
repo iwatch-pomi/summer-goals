@@ -1,104 +1,66 @@
 // ===========================================================================
-// 8月末・全ユーザーの部分返金を実行するバッチ（単体実行スクリプト）
+// 8月末・全ユーザーの部分返金を実行するバッチ（手動 / 単体実行スクリプト）
 //
 // 実行方法:
-//   STRIPE_SECRET_KEY=sk_test_xxx DATABASE_URL=postgres://... \
-//   npx tsx scripts/settle-refunds.ts
+//   STRIPE_SECRET_KEY=sk_test_xxx DATABASE_URL=postgres://... npm run settle
+//   （= tsx scripts/settle-refunds.ts）
 //
-// 返金額 = min(報告成功日数 × 100, デポジット上限 3000)
-// 失効額 = 3000 − 返金額（＝運営利益。参加費 ¥500 は別途確保）
-// JPY はゼロ桁通貨のため amount は「円そのまま」。
+// Vercel の Cron ルートと同じ精算ロジック（src/lib/settlement.ts）を再利用する。
+// 違いは「時間制限なしで残りが無くなるまで全ページ処理する」点。
+// → 月末に1回これを実行すれば、Hobby 枠でも全件をその場で精算できる。
+//
+// 返金額 = min(報告成功日数 × 100, デポジット上限 3000)。JPY は円そのまま。
 // idempotencyKey により再実行しても二重返金されない。
 // ===========================================================================
 
-import Stripe from "stripe";
-import { PrismaClient } from "@prisma/client";
+import { runSettlement } from "../src/lib/settlement";
+import { prisma } from "../src/lib/prisma";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2024-06-20",
-});
-const prisma = new PrismaClient();
+const PAGE_SIZE = Number(process.env.SETTLEMENT_PAGE_SIZE ?? 50);
 
 async function main() {
-  const today = new Date();
+  const now = new Date();
+  const total = {
+    evaluated: 0,
+    refunded: 0,
+    noRefund: 0,
+    failed: 0,
+    totalRefundedYen: 0,
+  };
 
-  const targets = await prisma.challenge.findMany({
-    where: {
-      status: "ACTIVE",
-      settlementStatus: "PENDING",
-      paymentStatus: "PAID",
-      endDate: { lte: today },
-    },
-  });
+  let page = 0;
+  // 残りが無くなるまで全ページ処理（手動実行なので時間制限なし）。
+  for (;;) {
+    const s = await runSettlement(now, { limit: PAGE_SIZE });
+    page += 1;
+    total.evaluated += s.evaluated;
+    total.refunded += s.refunded;
+    total.noRefund += s.noRefund;
+    total.failed += s.failed;
+    total.totalRefundedYen += s.totalRefundedYen;
 
-  console.log(`対象チャレンジ: ${targets.length}件`);
+    console.log(
+      `page ${page}: 評価 ${s.evaluated} / 返金 ${s.refunded} / 返金0 ${s.noRefund} / 失敗 ${s.failed} / ¥${s.totalRefundedYen}`
+    );
 
-  for (const c of targets) {
-    // 報告成功日数（期間内の distinct な報告日）
-    const days = await prisma.report.findMany({
-      where: {
-        challengeId: c.id,
-        reportDate: { gte: c.startDate, lte: c.endDate },
-      },
-      distinct: ["reportDate"],
-      select: { reportDate: true },
-    });
-    const successDays = days.length;
+    if (!s.hasMore) break;
+  }
 
-    // 返金額 = min(成功日数 × 100, デポジット上限 3000)
-    const refundAmount = Math.min(successDays * c.dailyForfeitYen, c.depositYen);
-    const forfeited = c.depositYen - refundAmount;
-
-    try {
-      let refundId: string | null = null;
-
-      if (refundAmount > 0) {
-        const refund = await stripe.refunds.create(
-          {
-            payment_intent: c.stripePaymentIntentId ?? undefined, // または charge: c.stripeChargeId
-            amount: refundAmount, // JPY はゼロ桁 → 円そのまま
-            metadata: {
-              challengeId: c.id,
-              successDays: String(successDays),
-            },
-          },
-          { idempotencyKey: `refund_${c.id}` } // 二重返金を防ぐ
-        );
-        refundId = refund.id;
-      }
-
-      await prisma.challenge.update({
-        where: { id: c.id },
-        data: {
-          successDays,
-          refundAmountYen: refundAmount,
-          forfeitedYen: forfeited,
-          stripeRefundId: refundId,
-          settlementStatus: refundAmount > 0 ? "REFUNDED" : "NO_REFUND",
-          status: "SETTLED",
-          settledAt: new Date(),
-        },
-      });
-
-      console.log(
-        `✓ ${c.id}: ${successDays}日成功 → ¥${refundAmount} 返金 / ¥${forfeited} 失効`
-      );
-    } catch (err) {
-      await prisma.challenge.update({
-        where: { id: c.id },
-        data: { settlementStatus: "REFUND_FAILED" },
-      });
-      console.error(
-        `✗ ${c.id} 返金失敗:`,
-        err instanceof Error ? err.message : err
-      );
-    }
+  console.log("──────────────────────────────");
+  console.log(
+    `完了: 評価 ${total.evaluated} 件 / 返金 ${total.refunded} 件 / 返金額合計 ¥${total.totalRefundedYen} / 失敗 ${total.failed} 件`
+  );
+  if (total.failed > 0) {
+    console.warn(
+      "⚠️ 失敗あり（settlementStatus=REFUND_FAILED）。Stripe の状態を確認し、原因解消後に再実行してください。"
+    );
   }
 
   await prisma.$disconnect();
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error(e);
+  await prisma.$disconnect();
   process.exit(1);
 });
