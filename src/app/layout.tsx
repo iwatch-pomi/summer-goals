@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f766e",
+  themeColor: "#14b8a6",
   width: "device-width",
   initialScale: 1,
 };
@@ -23,6 +24,16 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body>
+        <header className="site-header">
+          <div className="site-header-inner">
+            <Link href="/" className="logo">
+              Summer<span>Goals</span>
+            </Link>
+            <Link href="/signup" className="btn-pill">
+              エントリー
+            </Link>
+          </div>
+        </header>
         <main className="container">{children}</main>
         {/* PWA Service Worker 登録 */}
         <script
