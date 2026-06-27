@@ -8,7 +8,6 @@ import { createAnonClient } from "@/lib/supabase";
 // 本名は不要。表示名はサーバー側で匿名ニックネームを自動生成する。
 export default function SignupPage() {
   const router = useRouter();
-  const supabase = createAnonClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signup" | "login">("signup");
@@ -18,6 +17,9 @@ export default function SignupPage() {
   async function submit() {
     setLoading(true);
     setMsg(null);
+    // クライアントはクリック時（ブラウザ）に生成する。
+    // 描画時に生成すると、env 未設定のビルド時プリレンダーで落ちるため。
+    const supabase = createAnonClient();
     const fn =
       mode === "signup"
         ? supabase.auth.signUp({ email, password })
