@@ -22,9 +22,10 @@
 
 1. https://supabase.com にアクセスし「Start your project」でアカウント作成（GitHub ログイン可）。
 2. 「New project」を作成。リージョンは **Tokyo (Northeast Asia)** を推奨。データベースのパスワードはメモしておく。
-3. 左メニュー **Project Settings → Database** を開く:
-   - 「Connection string」→「URI」をコピー → これが `DATABASE_URL`。
-     （`[YOUR-PASSWORD]` の部分を 2 で決めたパスワードに置き換える）
+3. 画面上部の緑色の **「Connect」ボタン** を押す（旧 Project Settings → Database の場所から移動しました）:
+   - 「ORMs」→「Prisma」タブを選ぶと、`DATABASE_URL`（プール接続 6543）と `DIRECT_URL`（直接接続 5432）の2つが表示される。両方コピー。
+   - `[YOUR-PASSWORD]` の部分を 2 で決めたパスワードに置き換える。
+   - ※Vercel などサーバーレスでは接続が枯渇しやすいため、実行時はプール接続(6543)、マイグレーションは直接接続(5432)を使い分けます（コードは対応済み）。
 4. 左メニュー **Project Settings → API** を開く:
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` キー → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -71,7 +72,8 @@ Vercel の **Project → Settings → Environment Variables** に、以下を1�
 
 | 名前 | どこで取得 | 秘密? |
 |---|---|---|
-| `DATABASE_URL` | Supabase Database | ◯ |
+| `DATABASE_URL` | Supabase Connect → Prisma（プール 6543）| ◯ |
+| `DIRECT_URL` | Supabase Connect → Prisma（直接 5432）| ◯ |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase API | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase API | |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase API | ◯ |
