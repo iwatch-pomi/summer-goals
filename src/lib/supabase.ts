@@ -19,3 +19,20 @@ export function createServiceClient() {
 }
 
 export const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "reports";
+
+// 非公開バケット内のファイルを一時的に閲覧するための署名付きURLを発行する（サーバー専用）。
+// 写真は public ではないため、表示時に都度この関数で短命URLを作る。
+export async function createSignedReportUrl(
+  path: string,
+  expiresInSec = 60 * 60
+): Promise<string | null> {
+  const service = createServiceClient();
+  const { data, error } = await service.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(path, expiresInSec);
+  if (error) {
+    console.error("[storage] signed url error:", error);
+    return null;
+  }
+  return data.signedUrl;
+}

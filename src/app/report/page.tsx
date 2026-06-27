@@ -2,14 +2,13 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { createAnonClient, STORAGE_BUCKET } from "@/lib/supabase";
 
 // 毎日の進捗報告フォーム。テキスト + 任意の写真。
+// 写真はサーバー(/api/reports)経由で非公開バケットへ安全にアップロードされる。
 function ReportForm() {
   const router = useRouter();
   const params = useSearchParams();
   const matchId = params.get("matchId") ?? "";
-  const supabase = createAnonClient();
 
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -20,30 +19,17 @@ function ReportForm() {
     setLoading(true);
     setMsg(null);
 
-    let photoUrl: string | null = null;
-    if (file) {
-      // Supabase Storage にアップロードし公開 URL を取得。
-      const path = `${matchId}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(path, file);
-      if (upErr) {
-        setLoading(false);
-        setMsg("写真のアップロードに失敗しました: " + upErr.message);
-        return;
-      }
-      photoUrl = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl;
-    }
+    // multipart/form-data で送信（Content-Type はブラウザが自動設定）。
+    const fd = new FormData();
+    fd.append("matchId", matchId);
+    fd.append("textContent", text);
+    if (file) fd.append("photo", file);
 
-    const res = await fetch("/api/reports", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchId, textContent: text, photoUrl }),
-    });
+    const res = await fetch("/api/reports", { method: "POST", body: fd });
     setLoading(false);
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
-      setMsg(data.message ?? "報告に失敗しました");
+      setMsg(data?.message ?? "報告に失敗しました");
       return;
     }
     router.push("/dashboard");
@@ -56,7 +42,7 @@ function ReportForm() {
   return (
     <div>
       <h1>今日の進捗報告</h1>
-      <p className="muted">23:59（JST）までに報告すればペナルティはありません。</p>
+      <p className="muted">23:59（JST）までに報告すればデポジットは失効しません。</p>
 
       <label>今日やったこと</label>
       <textarea
@@ -66,7 +52,7 @@ function ReportForm() {
         placeholder="例: 単語100個 / スクワット50回"
       />
 
-      <label>証拠写真（任意）</label>
+      <label>証拠写真（任意・5MBまで）</label>
       <input
         type="file"
         accept="image/*"

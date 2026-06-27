@@ -2,21 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { ChallengeStatus, MatchStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { createServiceClient, STORAGE_BUCKET } from "@/lib/supabase";
 import { jstDateString, toDateOnly } from "@/lib/dates";
 
-// POST /api/reports
-// その日の進捗報告（テキスト + 写真URL）を保存する。1日1報告。
-// 写真は別途 Supabase Storage にアップロード済みの URL を受け取る想定。
+// 画像アップロード（Buffer）と service role を使うため Node ランタイム。
+export const runtime = "nodejs";
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
+
+// POST /api/reports  （multipart/form-data: matchId, textContent, photo?）
+// その日の進捗報告を保存する。1日1報告。写真は service role でサーバー側から
+// 非公開バケットへアップロードし、保存するのは「ストレージ上のパス」。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null);
-  const matchId = body?.matchId as string | undefined;
-  const textContent = (body?.textContent as string | undefined)?.trim();
-  const photoUrl = (body?.photoUrl as string | undefined) || null;
+  const form = await req.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json({ error: "invalid-form" }, { status: 400 });
+  }
+  const matchId = form.get("matchId") as string | null;
+  const textContent = (form.get("textContent") as string | null)?.trim();
+  const photo = form.get("photo");
 
   if (!matchId || !textContent) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
@@ -57,6 +66,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 写真があれば service role で非公開バケットへアップロード。保存するのはパス。
+  let photoPath: string | null = null;
+  if (photo instanceof File && photo.size > 0) {
+    if (!photo.type.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "invalid-file-type", message: "画像ファイルのみアップロードできます" },
+        { status: 400 }
+      );
+    }
+    if (photo.size > MAX_PHOTO_BYTES) {
+      return NextResponse.json(
+        { error: "file-too-large", message: "画像は5MBまでです" },
+        { status: 400 }
+      );
+    }
+    const ext = (photo.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${challenge.id}/${user.id}/${jstDateString()}-${crypto.randomUUID()}.${ext}`;
+    const bytes = Buffer.from(await photo.arrayBuffer());
+
+    const service = createServiceClient();
+    const { error: upErr } = await service.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, bytes, { contentType: photo.type, upsert: false });
+    if (upErr) {
+      return NextResponse.json(
+        { error: "upload-failed", message: "写真のアップロードに失敗しました" },
+        { status: 500 }
+      );
+    }
+    photoPath = path;
+  }
+
   try {
     const report = await prisma.report.create({
       data: {
@@ -65,7 +106,7 @@ export async function POST(req: NextRequest) {
         challengeId: challenge.id,
         reportDate,
         textContent,
-        photoUrl,
+        photoUrl: photoPath, // 非公開バケット上のパス（表示時に署名URLを発行）
       },
     });
     return NextResponse.json({ report }, { status: 201 });

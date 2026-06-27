@@ -30,7 +30,9 @@
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` キー → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` キー → `SUPABASE_SERVICE_ROLE_KEY`（**秘密。絶対に公開しない**）
-5. 左メニュー **Storage** で「New bucket」→ 名前を `reports`・**Public** で作成（進捗写真の保管先）。
+5. 左メニュー **Storage** で「New bucket」→ 名前を `reports`・**Public は OFF（非公開）** で作成（進捗写真の保管先）。
+   - 推奨: Restrict file size = 5MB、Restrict MIME types = `image/*`。
+   - **権限ポリシーの追加は不要**（アップロードはサーバーが service_role キーで行い、表示は署名付きURLを発行するため）。
    - バケット名を `SUPABASE_STORAGE_BUCKET` に設定（既定は `reports`）。
 6. 左メニュー **Authentication → Providers** で「Email」が有効になっていることを確認。
 
