@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoalGenre, GoalStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { tryMatchGoal } from "@/lib/matching";
 import { toDateOnly } from "@/lib/dates";
 
 // POST /api/goals
@@ -31,17 +30,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
   }
 
-  // 1ユーザー1ジャンル同時1件（進行中・待機中）に制限。
+  // 1ユーザー1ジャンル同時1件（進行中）に制限。
   const dup = await prisma.goal.findFirst({
-    where: {
-      userId: user.id,
-      genre,
-      status: { in: [GoalStatus.MATCHING, GoalStatus.ACTIVE] },
-    },
+    where: { userId: user.id, genre, status: GoalStatus.ACTIVE },
   });
   if (dup) {
     return NextResponse.json(
-      { error: "duplicate-genre", message: "同じジャンルの目標がすでに進行中です" },
+      { error: "duplicate-genre", message: "同じジャンルの目標がすでにあります" },
       { status: 409 }
     );
   }
@@ -54,20 +49,11 @@ export async function POST(req: NextRequest) {
       description,
       periodStart: toDateOnly(periodStart),
       periodEnd: toDateOnly(periodEnd),
-      status: GoalStatus.MATCHING,
+      status: GoalStatus.ACTIVE,
     },
   });
 
-  // 即時マッチング試行（相手がいればその場でペア成立）。
-  let matched = false;
-  try {
-    const res = await tryMatchGoal(goal.id);
-    matched = res.matched;
-  } catch {
-    // 競合時は MATCHING のまま。Cron スイープで拾う。
-  }
-
-  return NextResponse.json({ goal, matched }, { status: 201 });
+  return NextResponse.json({ goal }, { status: 201 });
 }
 
 // GET /api/goals — 自分の目標一覧

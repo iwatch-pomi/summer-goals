@@ -1,14 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-// 毎日の進捗報告フォーム。テキスト + 任意の写真。
+// 毎日の進捗報告フォーム（ソロ）。テキスト + 任意の写真。
 // 写真はサーバー(/api/reports)経由で非公開バケットへ安全にアップロードされる。
-function ReportForm() {
+export default function ReportPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const matchId = params.get("matchId") ?? "";
 
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -21,7 +19,6 @@ function ReportForm() {
 
     // multipart/form-data で送信（Content-Type はブラウザが自動設定）。
     const fd = new FormData();
-    fd.append("matchId", matchId);
     fd.append("textContent", text);
     if (file) fd.append("photo", file);
 
@@ -33,10 +30,6 @@ function ReportForm() {
       return;
     }
     router.push("/dashboard");
-  }
-
-  if (!matchId) {
-    return <p>マッチが指定されていません。</p>;
   }
 
   return (
@@ -64,13 +57,5 @@ function ReportForm() {
         {loading ? "送信中..." : "報告する"}
       </button>
     </div>
-  );
-}
-
-export default function ReportPage() {
-  return (
-    <Suspense fallback={<p>読み込み中...</p>}>
-      <ReportForm />
-    </Suspense>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChallengeStatus, MatchStatus, Prisma } from "@prisma/client";
+import { ChallengeStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { createServiceClient, STORAGE_BUCKET } from "@/lib/supabase";
@@ -10,9 +10,9 @@ export const runtime = "nodejs";
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
 
-// POST /api/reports  （multipart/form-data: matchId, textContent, photo?）
-// その日の進捗報告を保存する。1日1報告。写真は service role でサーバー側から
-// 非公開バケットへアップロードし、保存するのは「ストレージ上のパス」。
+// POST /api/reports  （multipart/form-data: textContent, photo?）
+// ソロの進捗報告。自分の進行中チャレンジ（Challenge）に紐づけて保存する。1日1報告。
+// 写真は service role でサーバー側から非公開バケットへアップロードし、保存するのはパス。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
@@ -23,30 +23,16 @@ export async function POST(req: NextRequest) {
   if (!form) {
     return NextResponse.json({ error: "invalid-form" }, { status: 400 });
   }
-  const matchId = form.get("matchId") as string | null;
   const textContent = (form.get("textContent") as string | null)?.trim();
   const photo = form.get("photo");
 
-  if (!matchId || !textContent) {
+  if (!textContent) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
-  }
-
-  // 自分が当事者である ACTIVE な Match か検証。
-  const match = await prisma.match.findFirst({
-    where: {
-      id: matchId,
-      status: MatchStatus.ACTIVE,
-      OR: [{ userAId: user.id }, { userBId: user.id }],
-    },
-  });
-  if (!match) {
-    return NextResponse.json({ error: "match-not-found" }, { status: 404 });
   }
 
   const reportDate = toDateOnly(jstDateString()); // 今日(JST)
 
-  // ★この報告が返金計算に反映されるよう、対象日が期間内の ACTIVE な Challenge を
-  //   引き当てて challengeId を保存する（これが無いと成功日数=0 で全額失効してしまう）。
+  // 対象日が期間内の ACTIVE な Challenge を引き当てる（無ければ報告不可）。
   const challenge = await prisma.challenge.findFirst({
     where: {
       userId: user.id,
@@ -101,12 +87,11 @@ export async function POST(req: NextRequest) {
   try {
     const report = await prisma.report.create({
       data: {
-        matchId,
         userId: user.id,
         challengeId: challenge.id,
         reportDate,
         textContent,
-        photoUrl: photoPath, // 非公開バケット上のパス（表示時に署名URLを発行）
+        photoUrl: photoPath,
       },
     });
     return NextResponse.json({ report }, { status: 201 });

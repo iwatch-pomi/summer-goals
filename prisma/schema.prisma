@@ -34,11 +34,6 @@ enum GoalStatus {
   CANCELLED // 取消・退会
 }
 
-enum MatchStatus {
-  ACTIVE
-  ENDED
-}
-
 enum ChallengePaymentStatus {
   PENDING // 未決済
   PAID // ¥3,500 決済成功
@@ -76,14 +71,14 @@ model User {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  goals      Goal[]
-  reports    Report[]
-  challenges Challenge[]
-  matchesAsA Match[]     @relation("MatchUserA")
-  matchesAsB Match[]     @relation("MatchUserB")
+  goals           Goal[]
+  reports         Report[]
+  challenges      Challenge[]
+  roomsCreated    Room[]       @relation("RoomCreator")
+  roomMemberships RoomMember[]
 }
 
-/// ユーザーが設定する目標。genre がマッチングのキーになる。
+/// ユーザーが設定する個人の目標（ソロ）。genre はタグ・部屋分類に流用。
 model Goal {
   id            String     @id @default(uuid())
   userId        String
@@ -93,58 +88,31 @@ model Goal {
   dailyDeadline String     @default("23:59") // 締切時刻(JST)
   periodStart   DateTime   @db.Date
   periodEnd     DateTime   @db.Date
-  status        GoalStatus @default(MATCHING)
+  status        GoalStatus @default(ACTIVE)
   createdAt     DateTime   @default(now())
 
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  matchAsGoalA Match? @relation("MatchGoalA")
-  matchAsGoalB Match? @relation("MatchGoalB")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([genre, status]) // マッチング探索用
   @@index([userId])
 }
 
-/// 成立したペア。2人のユーザーと、それぞれの目標を結びつける。
-model Match {
-  id        String      @id @default(uuid())
-  genre     GoalGenre
-  userAId   String
-  userBId   String
-  goalAId   String      @unique // 1目標1マッチ
-  goalBId   String      @unique
-  status    MatchStatus @default(ACTIVE)
-  startedAt DateTime    @db.Date // 進捗判定の起点（通常は成立翌日）
-  endedAt   DateTime?   @db.Date
-  createdAt DateTime    @default(now())
-
-  userA     User      @relation("MatchUserA", fields: [userAId], references: [id])
-  userB     User      @relation("MatchUserB", fields: [userBId], references: [id])
-  goalA   Goal     @relation("MatchGoalA", fields: [goalAId], references: [id])
-  goalB   Goal     @relation("MatchGoalB", fields: [goalBId], references: [id])
-  reports Report[]
-
-  @@index([status])
-}
-
-/// 毎日の進捗報告（テキスト + 写真）。1日1報告に制限する。
+/// 毎日の進捗報告（テキスト + 写真）。ソロ。自分の Challenge に紐づく。
 /// 報告有無のフラグ = 当該日に行が存在するか。タイムスタンプ = createdAt(JST)。
 model Report {
   id          String   @id @default(uuid())
-  matchId     String
   userId      String
-  challengeId String? // 成功日数カウントを Challenge に直結
+  challengeId String // ソロ報告は必ず自分の進行中チャレンジに紐づく
   reportDate  DateTime @db.Date // 対象日(JST)
   textContent String
-  photoUrl    String? // Supabase Storage の URL
+  photoUrl    String? // 非公開バケット上のパス（表示時に署名URLを発行）
   createdAt   DateTime @default(now())
 
-  match     Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id])
-  challenge Challenge? @relation(fields: [challengeId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
 
-  @@unique([matchId, userId, reportDate]) // 1日1報告・冪等性の核
-  @@index([matchId, reportDate])
-  @@index([challengeId, reportDate]) // 成功日数の集計用
+  @@unique([challengeId, reportDate]) // 1チャレンジ1日1報告・冪等性の核
+  @@index([challengeId, reportDate])
+  @@index([userId, reportDate]) // 部屋ボードでメンバーの当日報告を引く用
 }
 
 /// デポジット = 決済・返金の管理単位。ユーザー1人の1チャレンジ（例: 8月）= 1レコード。
@@ -194,4 +162,36 @@ model WebhookEvent {
   id          String   @id // Stripe の event id
   type        String
   processedAt DateTime @default(now())
+}
+
+/// 一緒に取り組む「部屋」。報告ボード（メンバーの当日報告を見せ合う）用。
+/// 決済・返金には関与しない（個人の Challenge が資金の単位）。
+model Room {
+  id          String     @id @default(uuid())
+  name        String
+  description String?
+  genre       GoalGenre? // 任意のジャンルタグ
+  createdById String
+  maxMembers  Int        @default(20)
+  createdAt   DateTime   @default(now())
+
+  createdBy User         @relation("RoomCreator", fields: [createdById], references: [id])
+  members   RoomMember[]
+
+  @@index([createdAt])
+}
+
+/// 部屋への参加（1人が複数部屋に参加可）。
+model RoomMember {
+  id       String   @id @default(uuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId]) // 二重入室防止
+  @@index([userId])
+  @@index([roomId])
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChallengeStatus, GoalStatus, MatchStatus } from "@prisma/client";
+import { ChallengeStatus, GoalStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jstDateString, toDateOnly } from "@/lib/dates";
@@ -7,7 +7,7 @@ import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
 
-// ダッシュボード。未参加・目標なし・マッチ状況に応じて表示を切り替える。
+// ダッシュボード（ソロ）。返金見込み・今日の報告・目標・参加中の部屋を表示。
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -39,17 +39,24 @@ export default async function DashboardPage() {
   const todayYmd = jstDateString();
   const today = toDateOnly(todayYmd);
 
-  // 進行中チャレンジ（返金見込みの計算）。
   const challenge = await prisma.challenge.findFirst({
     where: { userId: user.id, status: ChallengeStatus.ACTIVE },
     orderBy: { createdAt: "desc" },
   });
 
-  let challengeSummary: {
+  // 今日すでに報告したか。
+  const reportedToday = challenge
+    ? (await prisma.report.count({
+        where: { challengeId: challenge.id, reportDate: today },
+      })) > 0
+    : false;
+
+  let summary: {
     successDays: number;
     refundEstimateYen: number;
     daysRemaining: number;
     depositYen: number;
+    inPeriod: boolean;
   } | null = null;
 
   if (challenge) {
@@ -63,39 +70,30 @@ export default async function DashboardPage() {
     });
     const successDays = reportedDays.length;
     const msPerDay = 1000 * 60 * 60 * 24;
-    const daysRemaining = Math.max(
-      0,
-      Math.ceil((challenge.endDate.getTime() - today.getTime()) / msPerDay)
-    );
-    challengeSummary = {
+    summary = {
       successDays,
       refundEstimateYen: Math.min(
         successDays * challenge.dailyForfeitYen,
         challenge.depositYen
       ),
-      daysRemaining,
+      daysRemaining: Math.max(
+        0,
+        Math.ceil((challenge.endDate.getTime() - today.getTime()) / msPerDay)
+      ),
       depositYen: challenge.depositYen,
+      inPeriod: today >= challenge.startDate && today <= challenge.endDate,
     };
   }
 
-  // 進行中マッチ（自分が当事者）を取得。
-  const matches = await prisma.match.findMany({
-    where: {
-      status: MatchStatus.ACTIVE,
-      OR: [{ userAId: user.id }, { userBId: user.id }],
-    },
-    include: {
-      userA: { select: { displayName: true } },
-      userB: { select: { displayName: true } },
-      goalA: true,
-      goalB: true,
-      reports: { where: { reportDate: { equals: new Date(`${todayYmd}T00:00:00.000Z`) } } },
-    },
+  const goals = await prisma.goal.findMany({
+    where: { userId: user.id, status: GoalStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
   });
 
-  // マッチ待ちの目標。
-  const waitingGoals = await prisma.goal.findMany({
-    where: { userId: user.id, status: GoalStatus.MATCHING },
+  const myRooms = await prisma.roomMember.findMany({
+    where: { userId: user.id },
+    include: { room: { select: { id: true, name: true } } },
+    orderBy: { joinedAt: "desc" },
   });
 
   return (
@@ -112,68 +110,85 @@ export default async function DashboardPage() {
         <LogoutButton />
       </div>
 
-      {challengeSummary && (
+      {summary && (
         <div className="card">
           <span className="badge">チャレンジ進行中</span>
           <p style={{ fontSize: "1.25rem", margin: "8px 0" }}>
-            返金見込み <strong>¥{challengeSummary.refundEstimateYen.toLocaleString()}</strong>
-            <span className="muted"> / ¥{challengeSummary.depositYen.toLocaleString()}</span>
+            返金見込み <strong>¥{summary.refundEstimateYen.toLocaleString()}</strong>
+            <span className="muted"> / ¥{summary.depositYen.toLocaleString()}</span>
           </p>
           <p className="muted">
-            報告成功 {challengeSummary.successDays} 日 ・ 残り {challengeSummary.daysRemaining} 日
+            報告成功 {summary.successDays} 日 ・ 残り {summary.daysRemaining} 日
             <br />
             ※毎日報告するほど返金額が増えます（1日 ¥100）。
           </p>
         </div>
       )}
 
-      {matches.length === 0 && waitingGoals.length === 0 && (
-        <div className="card">
-          <p>まだ目標がありません。</p>
-          <Link href="/goals/new" className="btn">
-            目標を設定する
+      {/* 今日の報告 */}
+      <div className="card">
+        <strong>今日の報告</strong>
+        <p style={{ margin: "8px 0" }}>
+          {reportedToday ? "✅ 本日は報告済みです" : "⚠️ まだ報告していません"}
+        </p>
+        {!reportedToday && summary?.inPeriod && (
+          <Link href="/report" className="btn">
+            今日の進捗を報告する
+          </Link>
+        )}
+        {!summary?.inPeriod && (
+          <p className="muted" style={{ margin: 0 }}>
+            チャレンジ期間に入ると報告できます。
+          </p>
+        )}
+      </div>
+
+      {/* 目標 */}
+      <div className="card">
+        <strong>あなたの目標</strong>
+        {goals.length === 0 ? (
+          <>
+            <p className="muted">まだ目標がありません。</p>
+            <Link href="/goals/new" className="btn">
+              目標を設定する
+            </Link>
+          </>
+        ) : (
+          <>
+            <ul className="muted">
+              {goals.map((g) => (
+                <li key={g.id}>{g.title}</li>
+              ))}
+            </ul>
+            <Link href="/goals/new" className="muted">
+              ＋ 目標を追加
+            </Link>
+          </>
+        )}
+      </div>
+
+      {/* 部屋 */}
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <strong>参加中の部屋</strong>
+          <Link href="/rooms" className="muted">
+            部屋をさがす →
           </Link>
         </div>
-      )}
-
-      {waitingGoals.map((g) => (
-        <div className="card" key={g.id}>
-          <span className="badge">マッチング待ち</span>
-          <h3>{g.title}</h3>
-          <p className="muted">同じジャンルの相方を探しています…</p>
-        </div>
-      ))}
-
-      {matches.map((m) => {
-        const isA = m.userAId === user.id;
-        const myGoal = isA ? m.goalA : m.goalB;
-        const partnerName = isA ? m.userB.displayName : m.userA.displayName;
-        const iReportedToday = m.reports.some((r) => r.userId === user.id);
-        const partnerReportedToday = m.reports.some((r) => r.userId !== user.id);
-        return (
-          <div className="card" key={m.id}>
-            <span className="badge">進行中</span>
-            <h3>{myGoal.title}</h3>
-            <p className="muted">相方: {partnerName}</p>
-            <p>
-              今日のあなた: {iReportedToday ? "✅ 報告済み" : "⚠️ 未報告"}
-              <br />
-              今日の相方: {partnerReportedToday ? "✅ 報告済み" : "⏳ まだ"}
-            </p>
-            {!iReportedToday && (
-              <Link href={`/report?matchId=${m.id}`} className="btn">
-                今日の進捗を報告する
-              </Link>
-            )}
-          </div>
-        );
-      })}
-
-      {matches.length > 0 && (
-        <p className="muted" style={{ textAlign: "center", marginTop: 16 }}>
-          <Link href="/goals/new">別ジャンルの目標を追加</Link>
-        </p>
-      )}
+        {myRooms.length === 0 ? (
+          <p className="muted">
+            まだどの部屋にも参加していません。一人でも続けられますが、仲間と報告を見せ合うと続けやすくなります。
+          </p>
+        ) : (
+          <ul className="muted">
+            {myRooms.map((m) => (
+              <li key={m.id}>
+                <Link href={`/rooms/${m.room.id}`}>{m.room.name}</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
