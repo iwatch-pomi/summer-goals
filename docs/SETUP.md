@@ -35,6 +35,12 @@
    - **権限ポリシーの追加は不要**（アップロードはサーバーが service_role キーで行い、表示は署名付きURLを発行するため）。
    - バケット名を `SUPABASE_STORAGE_BUCKET` に設定（既定は `reports`）。
 6. 左メニュー **Authentication → Providers** で「Email」が有効になっていることを確認。
+7. **動作確認を急ぐ場合（推奨）**: Authentication → Providers → Email →「**Confirm email**」を **OFF** にする。
+   こうすると新規登録した瞬間にログイン状態になり、メール確認なしで一連の流れをテストできます。
+8. **メール確認を ON のまま使う場合**: Authentication → **URL Configuration** で
+   - Site URL: `https://<あなたのVercelドメイン>`
+   - Redirect URLs に `https://<あなたのVercelドメイン>/auth/callback` を追加
+   （確認メールのリンクがこの `/auth/callback` に戻り、セッションが確立されます）
 
 ---
 

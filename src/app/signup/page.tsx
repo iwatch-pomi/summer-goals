@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createAnonClient } from "@/lib/supabase";
+import { createBrowserSupabase } from "@/lib/supabase-browser";
 
 // 匿名サインアップ。メール+パスワードで Supabase Auth に登録/ログインする。
 // 本名は不要。表示名はサーバー側で匿名ニックネームを自動生成する。
@@ -17,21 +17,40 @@ export default function SignupPage() {
   async function submit() {
     setLoading(true);
     setMsg(null);
-    // クライアントはクリック時（ブラウザ）に生成する。
-    // 描画時に生成すると、env 未設定のビルド時プリレンダーで落ちるため。
-    const supabase = createAnonClient();
-    const fn =
-      mode === "signup"
-        ? supabase.auth.signUp({ email, password })
-        : supabase.auth.signInWithPassword({ email, password });
-    const { error } = await fn;
-    setLoading(false);
-    if (error) {
-      setMsg(error.message);
+    // クライアントはクリック時（ブラウザ）に生成する（プリレンダー回避 + Cookie保存）。
+    const supabase = createBrowserSupabase();
+
+    if (mode === "signup") {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      setLoading(false);
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
+      if (!data.session) {
+        // メール確認が有効な場合、この時点ではまだログインしていない。
+        setMsg(
+          "確認メールを送信しました。メール内のリンクを開いて登録を完了し、その後ログインしてください。"
+        );
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
       return;
     }
-    // 参加費の支払いへ。
-    router.push("/enroll");
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      setMsg(
+        error.message.includes("Email not confirmed")
+          ? "メール未確認です。確認メールのリンクを開いてからログインしてください。"
+          : error.message
+      );
+      return;
+    }
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (

@@ -3,6 +3,7 @@ import { ChallengeStatus, GoalStatus, MatchStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jstDateString, toDateOnly } from "@/lib/dates";
+import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
 
@@ -99,7 +100,17 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1>こんにちは、{user.displayName} さん</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <h1 style={{ margin: 0 }}>こんにちは、{user.displayName} さん</h1>
+        <LogoutButton />
+      </div>
 
       {challengeSummary && (
         <div className="card">
