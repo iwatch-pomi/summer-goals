@@ -74,6 +74,11 @@ export default function EnrollPage() {
         毎日報告すれば <strong>デポジットは全額（¥3,000）返金</strong> されます。サボった日数 × ¥100 が失効します。
       </p>
       <div className="card">
+        {!elements && !msg && (
+          <p className="muted" style={{ margin: 0 }}>
+            決済フォームを読み込み中…（数秒かかることがあります）
+          </p>
+        )}
         <div ref={elRef} />
       </div>
       {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
