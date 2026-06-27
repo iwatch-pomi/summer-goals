@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
+import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,16 +24,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body>
-        <header className="site-header">
-          <div className="site-header-inner">
-            <Link href="/" className="logo">
-              Summer<span>Goals</span>
-            </Link>
-            <Link href="/signup" className="btn-pill">
-              エントリー
-            </Link>
-          </div>
-        </header>
+        <SiteHeader />
         <main className="container">{children}</main>
         {/* PWA Service Worker 登録 */}
         <script
