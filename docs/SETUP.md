@@ -59,7 +59,7 @@
 
 1. Stripe の **Developers → Webhooks → Add endpoint**。
 2. URL は `https://あなたのアプリ.vercel.app/api/stripe/webhook`。
-3. イベントは最低限 `setup_intent.succeeded` と `payment_intent.payment_failed` を選ぶ。
+3. イベントは最低限 `payment_intent.succeeded` と `payment_intent.payment_failed` を選ぶ。
 4. 作成後に表示される `Signing secret`（`whsec_...`）→ `STRIPE_WEBHOOK_SECRET`。
 
 ---
@@ -91,15 +91,15 @@ Vercel の **Project → Settings → Environment Variables** に、以下を1�
 
 ### データベースの初期化（テーブル作成）
 
-環境変数 `DATABASE_URL` を設定したら、テーブルを作る必要があります。これだけは
-一度コマンドが必要なので、開発できる人に以下を1回だけ実行してもらってください
-（または Supabase の SQL エディタで Prisma が生成する SQL を実行）:
+環境変数 `DATABASE_URL` を設定したら、テーブルを作る必要があります。初回マイグレーション
+（`prisma/migrations/` に同梱済み）を、開発できる人に1回だけ流してもらってください:
 
 ```bash
-npx prisma migrate deploy   # 本番DBにテーブルを作成
+npx prisma migrate deploy   # 同梱の初回マイグレーションを本番DBに適用
 ```
 
-> ローカルで開発する場合は `npx prisma migrate dev --name init` で初回マイグレーションを作成します。
+> どうしても手早く済ませたい場合は `npx prisma db push`（マイグレーション履歴なしでスキーマを直接反映）も可。
+> Supabase の SQL エディタを使う場合は `prisma/migrations/20260801000000_init/migration.sql` の中身を貼り付けて実行しても同じです。
 
 ---
 

@@ -7,15 +7,15 @@ import { toDateOnly } from "@/lib/dates";
 
 // POST /api/goals
 // 目標を作成し、即時マッチングを試行する。
-// カード未登録ユーザーは作成不可（強制力の前提）。
+// ¥3,500 未決済（未参加）ユーザーは作成不可（強制力の前提）。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.cardRegistered) {
+  if (!user.paidMember) {
     return NextResponse.json(
-      { error: "card-required", message: "先にクレジットカードを登録してください" },
+      { error: "payment-required", message: "先に参加費（¥3,500）のお支払いが必要です" },
       { status: 403 }
     );
   }

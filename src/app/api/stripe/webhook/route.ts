@@ -34,24 +34,6 @@ export async function POST(req: NextRequest) {
   }
 
   switch (event.type) {
-    case "setup_intent.succeeded": {
-      const si = event.data.object as Stripe.SetupIntent;
-      const appUserId = si.metadata?.appUserId;
-      const paymentMethodId =
-        typeof si.payment_method === "string"
-          ? si.payment_method
-          : si.payment_method?.id;
-      if (appUserId && paymentMethodId) {
-        await prisma.user.update({
-          where: { id: appUserId },
-          data: {
-            defaultPaymentMethodId: paymentMethodId,
-            cardRegistered: true,
-          },
-        });
-      }
-      break;
-    }
     case "payment_intent.succeeded": {
       // フロー2: ¥3,500 の前払い成功 → 有料会員（アクティブ）化。
       const pi = event.data.object as Stripe.PaymentIntent;

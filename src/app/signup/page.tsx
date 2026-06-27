@@ -28,8 +28,8 @@ export default function SignupPage() {
       setMsg(error.message);
       return;
     }
-    // カード登録へ。
-    router.push("/card");
+    // 参加費の支払いへ。
+    router.push("/enroll");
   }
 
   return (

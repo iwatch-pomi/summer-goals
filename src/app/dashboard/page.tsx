@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { GoalStatus, MatchStatus } from "@prisma/client";
+import { ChallengeStatus, GoalStatus, MatchStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { jstDateString } from "@/lib/dates";
+import { jstDateString, toDateOnly } from "@/lib/dates";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
 
-// ダッシュボード。カード未登録・目標なし・マッチ状況に応じて表示を切り替える。
+// ダッシュボード。未参加・目標なし・マッチ状況に応じて表示を切り替える。
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -20,19 +20,62 @@ export default async function DashboardPage() {
     );
   }
 
-  if (!user.cardRegistered) {
+  if (!user.paidMember) {
     return (
       <div>
         <h1>あと一歩！</h1>
-        <p className="muted">マッチングの前にカード登録が必要です。</p>
-        <Link href="/card" className="btn">
-          カードを登録する
+        <p className="muted">
+          チャレンジ参加には参加費（¥3,500）のお支払いが必要です。
+          内訳: 参加費 ¥500（返金不可）＋ デポジット ¥3,000（報告した日数に応じて返金）。
+        </p>
+        <Link href="/enroll" className="btn">
+          ¥3,500 を支払って参加する
         </Link>
       </div>
     );
   }
 
   const todayYmd = jstDateString();
+  const today = toDateOnly(todayYmd);
+
+  // 進行中チャレンジ（返金見込みの計算）。
+  const challenge = await prisma.challenge.findFirst({
+    where: { userId: user.id, status: ChallengeStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
+  });
+
+  let challengeSummary: {
+    successDays: number;
+    refundEstimateYen: number;
+    daysRemaining: number;
+    depositYen: number;
+  } | null = null;
+
+  if (challenge) {
+    const reportedDays = await prisma.report.findMany({
+      where: {
+        challengeId: challenge.id,
+        reportDate: { gte: challenge.startDate, lte: challenge.endDate },
+      },
+      distinct: ["reportDate"],
+      select: { reportDate: true },
+    });
+    const successDays = reportedDays.length;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil((challenge.endDate.getTime() - today.getTime()) / msPerDay)
+    );
+    challengeSummary = {
+      successDays,
+      refundEstimateYen: Math.min(
+        successDays * challenge.dailyForfeitYen,
+        challenge.depositYen
+      ),
+      daysRemaining,
+      depositYen: challenge.depositYen,
+    };
+  }
 
   // 進行中マッチ（自分が当事者）を取得。
   const matches = await prisma.match.findMany({
@@ -57,6 +100,21 @@ export default async function DashboardPage() {
   return (
     <div>
       <h1>こんにちは、{user.displayName} さん</h1>
+
+      {challengeSummary && (
+        <div className="card">
+          <span className="badge">チャレンジ進行中</span>
+          <p style={{ fontSize: "1.25rem", margin: "8px 0" }}>
+            返金見込み <strong>¥{challengeSummary.refundEstimateYen.toLocaleString()}</strong>
+            <span className="muted"> / ¥{challengeSummary.depositYen.toLocaleString()}</span>
+          </p>
+          <p className="muted">
+            報告成功 {challengeSummary.successDays} 日 ・ 残り {challengeSummary.daysRemaining} 日
+            <br />
+            ※毎日報告するほど返金額が増えます（1日 ¥100）。
+          </p>
+        </div>
+      )}
 
       {matches.length === 0 && waitingGoals.length === 0 && (
         <div className="card">

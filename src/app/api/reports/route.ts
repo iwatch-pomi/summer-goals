@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MatchStatus, Prisma } from "@prisma/client";
+import { ChallengeStatus, MatchStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { jstDateString, toDateOnly } from "@/lib/dates";
@@ -36,9 +36,37 @@ export async function POST(req: NextRequest) {
 
   const reportDate = toDateOnly(jstDateString()); // 今日(JST)
 
+  // ★この報告が返金計算に反映されるよう、対象日が期間内の ACTIVE な Challenge を
+  //   引き当てて challengeId を保存する（これが無いと成功日数=0 で全額失効してしまう）。
+  const challenge = await prisma.challenge.findFirst({
+    where: {
+      userId: user.id,
+      status: ChallengeStatus.ACTIVE,
+      startDate: { lte: reportDate },
+      endDate: { gte: reportDate },
+    },
+    select: { id: true },
+  });
+  if (!challenge) {
+    return NextResponse.json(
+      {
+        error: "no-active-challenge",
+        message: "進行中のチャレンジがありません（参加期間外、または未参加です）",
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const report = await prisma.report.create({
-      data: { matchId, userId: user.id, reportDate, textContent, photoUrl },
+      data: {
+        matchId,
+        userId: user.id,
+        challengeId: challenge.id,
+        reportDate,
+        textContent,
+        photoUrl,
+      },
     });
     return NextResponse.json({ report }, { status: 201 });
   } catch (e) {
