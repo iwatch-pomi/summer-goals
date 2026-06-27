@@ -55,11 +55,20 @@ export default function EnrollPage() {
       },
       redirect: "if_required",
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setMsg(error.message ?? "決済に失敗しました");
       return;
     }
+
+    // Webhook の到着を待たず、その場でサーバーにアクティベートさせる。
+    // これにより決済直後に「返金見込み」画面（参加済みダッシュボード）へ移れる。
+    try {
+      await fetch("/api/challenges/confirm", { method: "POST" });
+    } catch {
+      // 失敗しても Webhook が後で反映する。ダッシュボードへは進める。
+    }
+
     router.push("/dashboard");
   }
 

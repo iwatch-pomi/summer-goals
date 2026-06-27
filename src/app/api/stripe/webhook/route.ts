@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { markChallengePaid } from "@/lib/enrollment";
 
 // Webhook は生のボディが必要なため Node ランタイムを使う。
 export const runtime = "nodejs";
@@ -37,28 +38,23 @@ export async function POST(req: NextRequest) {
     case "payment_intent.succeeded": {
       // フロー2: ¥3,500 の前払い成功 → 有料会員（アクティブ）化。
       const pi = event.data.object as Stripe.PaymentIntent;
-      if (pi.metadata?.kind === "enrollment" && pi.metadata?.challengeId) {
+      if (
+        pi.metadata?.kind === "enrollment" &&
+        pi.metadata?.challengeId &&
+        pi.metadata?.userId
+      ) {
         // 返金で使う Charge ID を保持（latest_charge）。
         const chargeId =
           typeof pi.latest_charge === "string"
             ? pi.latest_charge
             : pi.latest_charge?.id ?? null;
 
-        await prisma.challenge.update({
-          where: { id: pi.metadata.challengeId },
-          data: {
-            paymentStatus: "PAID",
-            status: "ACTIVE",
-            stripeChargeId: chargeId,
-            paidAt: new Date(),
-          },
+        // 決済直後の確認API と同じ冪等処理を共用（両方走っても安全）。
+        await markChallengePaid({
+          challengeId: pi.metadata.challengeId,
+          userId: pi.metadata.userId,
+          chargeId,
         });
-        if (pi.metadata.userId) {
-          await prisma.user.update({
-            where: { id: pi.metadata.userId },
-            data: { paidMember: true }, // ★有料会員アクティブ
-          });
-        }
       }
       break;
     }
