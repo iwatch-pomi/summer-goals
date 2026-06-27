@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 // ===========================================================================
@@ -56,13 +57,23 @@ export async function getCurrentUser() {
   const existing = await prisma.user.findUnique({ where: { email: user.email } });
   if (existing) return existing;
 
-  return prisma.user.create({
-    data: {
-      email: user.email,
-      displayName: randomDisplayName(),
-      avatarSeed: user.id,
-    },
-  });
+  // 初回ログイン時、同時並行のリクエスト（ページ＋API＋middleware等）が
+  // 同じユーザーを二重作成し unique 制約違反(P2002)で 500 になるのを防ぐ。
+  try {
+    return await prisma.user.create({
+      data: {
+        email: user.email,
+        displayName: randomDisplayName(),
+        avatarSeed: user.id,
+      },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      // 並行リクエストが先に作成済み → それを返す。
+      return prisma.user.findUnique({ where: { email: user.email } });
+    }
+    throw e;
+  }
 }
 
 /** 認証必須の API 用。未ログインなら例外を投げる。 */
