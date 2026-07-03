@@ -5,7 +5,7 @@ export default function HomePage() {
   return (
     <div>
       <section className="hero">
-        <span className="badge">大学生限定・8月1日 一斉スタート</span>
+        <span className="badge">大学生限定・8月12日 一斉スタート</span>
 
         <h2 className="headline">
           この夏、
@@ -31,7 +31,7 @@ export default function HomePage() {
               flexShrink: 0,
             }}
           />
-          先行予約 受付中　<span className="muted">／ 8月1日 一斉スタート 🔥</span>
+          先行予約 受付中　<span className="muted">／ 8月12日 一斉スタート 🔥</span>
         </div>
 
         <Link href="/signup?mode=signup" className="btn btn-lg" style={{ marginTop: 18 }}>

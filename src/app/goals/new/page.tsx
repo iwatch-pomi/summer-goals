@@ -19,7 +19,7 @@ export default function NewGoalPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   // 夏休み期間の既定値。
-  const [periodStart, setPeriodStart] = useState("2026-08-01");
+  const [periodStart, setPeriodStart] = useState("2026-08-12");
   const [periodEnd, setPeriodEnd] = useState("2026-09-30");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
