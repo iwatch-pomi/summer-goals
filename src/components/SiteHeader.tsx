@@ -40,9 +40,12 @@ export default function SiteHeader() {
         </Link>
 
         <nav style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link href="/rooms" className="muted" style={{ fontWeight: 700 }}>
-            部屋
-          </Link>
+          {/* ログイン/新規登録画面では右側の導線を出さない */}
+          {!onAuthPage && (
+            <Link href="/rooms" className="muted" style={{ fontWeight: 700 }}>
+              部屋
+            </Link>
+          )}
 
           {/* loggedIn === null（判定中）は何も出さずチラつき防止 */}
           {loggedIn === true && (
