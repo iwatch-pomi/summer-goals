@@ -34,10 +34,16 @@ export default function HomePage() {
           先行予約 受付中　<span className="muted">／ 8月1日 一斉スタート 🔥</span>
         </div>
 
-        <Link href="/signup" className="btn btn-lg" style={{ marginTop: 18 }}>
+        <Link href="/signup?mode=signup" className="btn btn-lg" style={{ marginTop: 18 }}>
           この夏、自分に賭けてみる →
         </Link>
-        <p className="sub">先行予約（無料）・決済はスタート確定後</p>
+        <p className="sub">
+          先行予約（無料）・決済はスタート確定後　·　すでに登録済みの方は{" "}
+          <Link href="/signup?mode=login">ログイン</Link>
+        </p>
+        <p className="sub" style={{ marginTop: 4 }}>
+          <Link href="/rooms">みんなの部屋をのぞいてみる →</Link>
+        </p>
 
         <div className="stats">
           <div className="stat">
@@ -81,11 +87,11 @@ export default function HomePage() {
       </section>
 
       <section style={{ marginTop: 32 }} className="center">
-        <Link href="/signup" className="btn btn-lg">
+        <Link href="/signup?mode=signup" className="btn btn-lg">
           この夏、自分に賭けてみる →
         </Link>
         <p className="sub">
-          すでに登録済みの方は <Link href="/dashboard">ダッシュボードへ</Link>
+          すでに登録済みの方は <Link href="/signup?mode=login">ログイン</Link>
         </p>
       </section>
     </div>

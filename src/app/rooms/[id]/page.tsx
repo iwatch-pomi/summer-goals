@@ -7,23 +7,14 @@ import { JoinLeaveButton } from "@/components/RoomButtons";
 
 export const dynamic = "force-dynamic";
 
-// 部屋ボード。メンバーの「今日の報告状況＋内容」を見せ合う。
+// 部屋ボード。ログイン時はメンバーの「今日の報告状況＋内容」を表示。
+// 未ログインは中身（本文・写真）を出さず、部屋情報＋ログイン導線のみ（ティザー）。
 export default async function RoomBoardPage({
   params,
 }: {
   params: { id: string };
 }) {
   const user = await getCurrentUser();
-  if (!user) {
-    return (
-      <div>
-        <h1>ログインが必要です</h1>
-        <Link href="/signup" className="btn">
-          ログイン / 新規登録
-        </Link>
-      </div>
-    );
-  }
 
   const room = await prisma.room.findUnique({
     where: { id: params.id },
@@ -46,17 +37,53 @@ export default async function RoomBoardPage({
     );
   }
 
+  const header = (
+    <>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <h1 style={{ margin: 0 }}>{room.name}</h1>
+        <Link href="/rooms" className="muted">
+          ← 一覧
+        </Link>
+      </div>
+      {room.description && <p className="muted">{room.description}</p>}
+    </>
+  );
+
+  // 未ログイン: ティザー（メンバー数・ニックネームのみ、報告内容は非表示）。
+  if (!user) {
+    return (
+      <div>
+        {header}
+        <p className="muted">👥 {room.members.length} 人が参加中</p>
+        <div className="card">
+          <p>この部屋のメンバー</p>
+          <ul className="muted">
+            {room.members.map((m) => (
+              <li key={m.id}>{m.user.displayName}</li>
+            ))}
+          </ul>
+          <p className="muted">
+            メンバーの日々の報告を見たり、参加するにはログインが必要です。
+          </p>
+          <Link href="/signup?mode=login" className="btn">
+            ログインして中を見る
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const joined = room.members.some((m) => m.userId === user.id);
   const today = toDateOnly(jstDateString());
   const memberIds = room.members.map((m) => m.userId);
 
-  // メンバーの今日の報告を一括取得し userId で引けるように。
   const todayReports = await prisma.report.findMany({
     where: { userId: { in: memberIds }, reportDate: today },
   });
   const reportByUser = new Map(todayReports.map((r) => [r.userId, r]));
 
-  // 写真は非公開バケットなので署名URLを発行。
   const signedByUser = new Map<string, string>();
   for (const r of todayReports) {
     if (r.photoUrl) {
@@ -65,25 +92,11 @@ export default async function RoomBoardPage({
     }
   }
 
-  const reportedCount = todayReports.length;
-
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <h1 style={{ margin: 0 }}>{room.name}</h1>
-        <Link href="/rooms" className="muted">
-          ← 一覧
-        </Link>
-      </div>
-      {room.description && <p className="muted">{room.description}</p>}
+      {header}
       <p className="muted">
-        今日の報告: {reportedCount} / {room.members.length} 人
+        今日の報告: {todayReports.length} / {room.members.length} 人
       </p>
 
       {user.paidMember && (
