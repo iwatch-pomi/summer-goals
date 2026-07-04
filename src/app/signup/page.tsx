@@ -132,12 +132,12 @@ function AuthForm() {
     router.refresh();
   }
 
-  // Google でログイン/登録。戻り先 /auth/callback → /onboarding（未設定なら名前入力）。
-  async function signInWithGoogle() {
+  // Google / Apple でログイン/登録。戻り先 /auth/callback → /onboarding（未設定なら名前入力）。
+  async function oauth(provider: "google" | "apple") {
     setMsg(null);
     const supabase = createBrowserSupabase();
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
+      provider,
       options: { redirectTo: `${window.location.origin}/auth/callback?next=/onboarding` },
     });
     if (error) setMsg(translateAuthError(error));
@@ -203,10 +203,17 @@ function AuthForm() {
       </div>
       <button
         type="button"
-        onClick={signInWithGoogle}
+        onClick={() => oauth("google")}
         className="btn-secondary"
       >
         Google で続ける
+      </button>
+      <button
+        type="button"
+        onClick={() => oauth("apple")}
+        style={{ background: "#000", color: "#fff", boxShadow: "none", marginTop: 10 }}
+      >
+         Apple でサインイン
       </button>
 
       <p className="muted" style={{ textAlign: "center", marginTop: 12 }}>
