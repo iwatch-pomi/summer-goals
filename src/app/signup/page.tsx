@@ -17,7 +17,9 @@ function AuthForm() {
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function submit() {
+  async function submit(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (loading) return;
     setLoading(true);
     setMsg(null);
     const supabase = createBrowserSupabase();
@@ -59,26 +61,30 @@ function AuthForm() {
       <h1>{mode === "signup" ? "新規登録" : "ログイン"}</h1>
       <p className="muted">メールアドレスは本人確認・通知にのみ使用します（匿名で利用できます）。</p>
 
-      <label>メールアドレス</label>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@example.com"
-      />
-      <label>パスワード</label>
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="8文字以上"
-      />
+      <form onSubmit={submit}>
+        <label>メールアドレス</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          autoComplete="email"
+        />
+        <label>パスワード</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="8文字以上"
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+        />
 
-      {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
+        {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
 
-      <button onClick={submit} disabled={loading}>
-        {loading ? "処理中..." : mode === "signup" ? "登録して次へ" : "ログイン"}
-      </button>
+        <button type="submit" disabled={loading}>
+          {loading ? "処理中..." : mode === "signup" ? "登録して次へ" : "ログイン"}
+        </button>
+      </form>
 
       <p className="muted" style={{ textAlign: "center", marginTop: 12 }}>
         {mode === "signup" ? "アカウントをお持ちですか？ " : "はじめての方は "}
