@@ -11,7 +11,12 @@ export const runtime = "nodejs";
 //   https://<あなたのドメイン>/auth/callback を Redirect URL として登録すること。
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
-  const next = req.nextUrl.searchParams.get("next") ?? "/dashboard";
+  // オープンリダイレクト対策: 同一サイト内の相対パス（/... かつ //... でない）のみ許可。
+  const nextParam = req.nextUrl.searchParams.get("next");
+  const next =
+    nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+      ? nextParam
+      : "/dashboard";
 
   if (code) {
     const cookieStore = cookies();

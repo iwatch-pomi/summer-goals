@@ -9,6 +9,18 @@ import { jstDateString, toDateOnly } from "@/lib/dates";
 export const runtime = "nodejs";
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
 
 // POST /api/reports  （multipart/form-data: textContent, photo?）
 // ソロの進捗報告。自分の進行中チャレンジ（Challenge）に紐づけて保存する。1日1報告。
@@ -55,9 +67,10 @@ export async function POST(req: NextRequest) {
   // 写真があれば service role で非公開バケットへアップロード。保存するのはパス。
   let photoPath: string | null = null;
   if (photo instanceof File && photo.size > 0) {
-    if (!photo.type.startsWith("image/")) {
+    // ラスター画像のみ許可（SVG はスクリプトを含みうるため除外）。
+    if (!ALLOWED_IMAGE_TYPES.has(photo.type)) {
       return NextResponse.json(
-        { error: "invalid-file-type", message: "画像ファイルのみアップロードできます" },
+        { error: "invalid-file-type", message: "画像（JPEG/PNG/WebP/GIF）のみアップロードできます" },
         { status: 400 }
       );
     }
@@ -67,7 +80,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const ext = (photo.name.split(".").pop() || "jpg").toLowerCase();
+    // 拡張子はファイル名（クライアント任意）由来なので英数字のみに正規化する。
+    // これをしないと "a.png/../../x" のようなパストラバーサルを許してしまう。
+    const ext = EXT_BY_TYPE[photo.type] ?? "jpg";
     const path = `${challenge.id}/${user.id}/${jstDateString()}-${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await photo.arrayBuffer());
 

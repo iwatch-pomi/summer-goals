@@ -37,18 +37,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 期間。既定の開始日は「環境変数 CHALLENGE_START_DATE があればそれ／無ければ今日(JST)」。
-  // ★本番(8月一斉スタート)は CHALLENGE_START_DATE=2026-08-01 を設定する。
-  //   未設定だと“今日”開始になるので、テスト中でもその場で進捗報告できる
-  //   （以前は 2026-08-01 固定だったため、8月より前は「参加期間外」で報告できなかった）。
-  const body = await req.json().catch(() => null);
-  const startYmd =
-    (body?.startDate as string | undefined) ??
-    process.env.CHALLENGE_START_DATE ??
-    jstDateString();
-  const endYmd =
-    (body?.endDate as string | undefined) ??
-    addDays(startYmd, CHALLENGE_DURATION_DAYS - 1);
+  // 期間はサーバー設定のみで決める（クライアントからは受け取らない）。
+  // 開始日 = 環境変数 CHALLENGE_START_DATE があればそれ／無ければ今日(JST)。
+  // ★本番(8月一斉スタート)は CHALLENGE_START_DATE=2026-08-12 を設定する。
+  //   以前は body で startDate/endDate を上書きできたが、期間は返金判定に関わる
+  //   ため、改ざん防止としてクライアント入力を廃止した。
+  const startYmd = process.env.CHALLENGE_START_DATE ?? jstDateString();
+  const endYmd = addDays(startYmd, CHALLENGE_DURATION_DAYS - 1);
 
   // Stripe Customer を確保（setup/route.ts と同じロジック）。
   let customerId = user.stripeCustomerId;
