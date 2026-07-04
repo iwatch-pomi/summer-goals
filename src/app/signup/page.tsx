@@ -4,6 +4,52 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase-browser";
 
+// Supabase の認証エラー（英語）を日本語に変換する。
+// code 優先、無ければメッセージ文字列で判定。未知のものは汎用文言。
+function translateAuthError(error: { message?: string; code?: string }): string {
+  const code = error.code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+
+  if (code === "invalid_credentials" || msg.includes("invalid login credentials")) {
+    return "メールアドレスまたはパスワードが正しくありません。";
+  }
+  if (
+    code === "user_already_exists" ||
+    code === "email_exists" ||
+    msg.includes("already registered") ||
+    msg.includes("already been registered")
+  ) {
+    return "このメールアドレスは既に登録されています。ログインしてください。";
+  }
+  if (code === "weak_password" || msg.includes("password should be at least")) {
+    return "パスワードが短すぎます。6文字以上で入力してください。";
+  }
+  if (
+    code === "validation_failed" ||
+    msg.includes("unable to validate email") ||
+    msg.includes("invalid format") ||
+    msg.includes("invalid email")
+  ) {
+    return "メールアドレスの形式が正しくありません。";
+  }
+  if (msg.includes("email not confirmed")) {
+    return "メール未確認です。確認メールのリンクを開いてからログインしてください。";
+  }
+  if (
+    code.includes("rate_limit") ||
+    msg.includes("rate limit") ||
+    msg.includes("for security purposes") ||
+    msg.includes("you can only request this after")
+  ) {
+    return "リクエストが多すぎます。しばらく時間をおいて再度お試しください。";
+  }
+  if (msg.includes("password") && msg.includes("required")) {
+    return "パスワードを入力してください。";
+  }
+  // 未知のエラーは原文を添えて汎用文言。
+  return "エラーが発生しました。入力内容をご確認ください。";
+}
+
 // 匿名の登録/ログイン。メール+パスワードで Supabase Auth を使う。
 // ヘッダーの「ログイン」「新規登録」から ?mode= で初期タブが決まる。
 function AuthForm() {
@@ -47,7 +93,7 @@ function AuthForm() {
       });
       setLoading(false);
       if (error) {
-        setMsg(error.message);
+        setMsg(translateAuthError(error));
         return;
       }
       if (!data.session) {
@@ -64,11 +110,7 @@ function AuthForm() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
-      setMsg(
-        error.message.includes("Email not confirmed")
-          ? "メール未確認です。確認メールのリンクを開いてからログインしてください。"
-          : error.message
-      );
+      setMsg(translateAuthError(error));
       return;
     }
     router.push("/dashboard");
