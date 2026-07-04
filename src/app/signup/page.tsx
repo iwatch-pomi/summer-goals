@@ -13,6 +13,8 @@ function AuthForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [university, setUniversity] = useState("");
   const [mode, setMode] = useState<"signup" | "login">(initialMode);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,12 +22,29 @@ function AuthForm() {
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     if (loading) return;
+
+    if (mode === "signup" && !username.trim()) {
+      setMsg("ユーザーネームを入力してください");
+      return;
+    }
+
     setLoading(true);
     setMsg(null);
     const supabase = createBrowserSupabase();
 
     if (mode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // 公開ユーザーネーム・大学名は user_metadata に保存し、
+      // 初回の User 作成時（サーバー側 getCurrentUser）に反映する。
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username: username.trim(),
+            university: university.trim() || null,
+          },
+        },
+      });
       setLoading(false);
       if (error) {
         setMsg(error.message);
@@ -62,6 +81,28 @@ function AuthForm() {
       <p className="muted">メールアドレスは本人確認・通知にのみ使用します（匿名で利用できます）。</p>
 
       <form onSubmit={submit}>
+        {mode === "signup" && (
+          <>
+            <label>ユーザーネーム（全員に公開されます）</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="例: がんばるカワウソ"
+              maxLength={30}
+              autoComplete="nickname"
+            />
+            <label>大学名（任意）</label>
+            <input
+              type="text"
+              value={university}
+              onChange={(e) => setUniversity(e.target.value)}
+              placeholder="例: 〇〇大学"
+              maxLength={60}
+            />
+          </>
+        )}
+
         <label>メールアドレス</label>
         <input
           type="email"

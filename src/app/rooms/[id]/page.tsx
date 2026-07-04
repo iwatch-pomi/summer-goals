@@ -20,7 +20,9 @@ export default async function RoomBoardPage({
     where: { id: params.id },
     include: {
       members: {
-        include: { user: { select: { id: true, displayName: true } } },
+        include: {
+          user: { select: { id: true, displayName: true, university: true } },
+        },
         orderBy: { joinedAt: "asc" },
       },
     },
@@ -141,6 +143,12 @@ export default async function RoomBoardPage({
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <strong>
                 {m.user.displayName}
+                {m.user.university && (
+                  <span className="muted" style={{ fontWeight: 400 }}>
+                    {" "}
+                    · {m.user.university}
+                  </span>
+                )}
                 {isMe && <span className="muted">（あなた）</span>}
               </strong>
               <span>{r ? "✅ 報告済み" : "⏳ 未報告"}</span>

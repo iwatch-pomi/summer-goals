@@ -57,13 +57,29 @@ export async function getCurrentUser() {
   const existing = await prisma.user.findUnique({ where: { email: user.email } });
   if (existing) return existing;
 
+  // 登録時に signUp(options.data) で渡した公開ユーザーネーム・大学名を反映。
+  // 未指定ならランダムな匿名ニックネームにフォールバック。
+  const meta = (user.user_metadata ?? {}) as {
+    username?: unknown;
+    university?: unknown;
+  };
+  const username =
+    typeof meta.username === "string" && meta.username.trim()
+      ? meta.username.trim().slice(0, 30)
+      : randomDisplayName();
+  const university =
+    typeof meta.university === "string" && meta.university.trim()
+      ? meta.university.trim().slice(0, 60)
+      : null;
+
   // 初回ログイン時、同時並行のリクエスト（ページ＋API＋middleware等）が
   // 同じユーザーを二重作成し unique 制約違反(P2002)で 500 になるのを防ぐ。
   try {
     return await prisma.user.create({
       data: {
         email: user.email,
-        displayName: randomDisplayName(),
+        displayName: username,
+        university,
         avatarSeed: user.id,
       },
     });
