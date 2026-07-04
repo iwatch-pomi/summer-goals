@@ -63,7 +63,15 @@ Supabase の `https://<プロジェクト>.supabase.co/auth/v1/callback`（Supab
    **Key ID** と（アカウントの）**Team ID** を控える。
 4. Supabase → Authentication → Providers → **Apple** を ON。
    - Client IDs: 手順1の Services ID
-   - Secret Key: Team ID / Key ID / `.p8` から生成（Supabase の「Login with Apple」ガイドに生成手順あり）
+   - Secret Key: Team ID / Key ID / Services ID / `.p8` から JWT を生成して貼る。
+     生成は同梱スクリプトが簡単:
+     ```bash
+     APPLE_TEAM_ID=XXXX APPLE_KEY_ID=YYYY \
+     APPLE_SERVICES_ID=com.example.summergoals.web \
+     APPLE_P8_PATH=./AuthKey_YYYY.p8 \
+     node scripts/apple-client-secret.mjs
+     ```
+     出力された JWT を貼る。**約6ヶ月で失効する**ので、切れたら再生成して更新する。
 5. Site URL / Redirect URLs（上の 8）に本番ドメインが入っていることを確認。
 
 > 補足: 名前（ユーザーネーム）は Google/Apple では初回ログイン後の `/onboarding` で入力する
