@@ -44,6 +44,22 @@ export default async function AccountPage() {
         <p style={{ margin: "4px 0" }}>{user.university ?? "（未設定）"}</p>
       </div>
 
+      <div className="card">
+        <strong>参加状況</strong>
+        {user.paidMember ? (
+          <p style={{ margin: "8px 0 0" }}>✅ 参加済み（お支払い完了）</p>
+        ) : (
+          <>
+            <p className="muted" style={{ margin: "8px 0" }}>
+              未参加です。お支払い（¥3,500）をするとチャレンジを始められます。
+            </p>
+            <Link href="/enroll" className="btn">
+              ¥3,500 を支払って参加する
+            </Link>
+          </>
+        )}
+      </div>
+
       {pending ? (
         <div className="card" style={{ borderColor: "#fca5a5" }}>
           <span className="badge">退会手続き中</span>
