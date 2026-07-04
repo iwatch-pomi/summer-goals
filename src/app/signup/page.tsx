@@ -79,6 +79,21 @@ function AuthForm() {
     const supabase = createBrowserSupabase();
 
     if (mode === "signup") {
+      // ユーザーネームの重複を事前チェック（登録前に弾く）。
+      try {
+        const r = await fetch(
+          `/api/username-available?name=${encodeURIComponent(username.trim())}`
+        );
+        const j = await r.json();
+        if (!j.available) {
+          setLoading(false);
+          setMsg("このユーザーネームは既に使われています。別の名前にしてください。");
+          return;
+        }
+      } catch {
+        // チェックに失敗しても登録は続行（サーバー側の一意制約が最終防衛）。
+      }
+
       // 公開ユーザーネーム・大学名は user_metadata に保存し、
       // 初回の User 作成時（サーバー側 getCurrentUser）に反映する。
       const { data, error } = await supabase.auth.signUp({
@@ -115,6 +130,17 @@ function AuthForm() {
     }
     router.push("/dashboard");
     router.refresh();
+  }
+
+  // Google でログイン/登録。戻り先 /auth/callback → /onboarding（未設定なら名前入力）。
+  async function signInWithGoogle() {
+    setMsg(null);
+    const supabase = createBrowserSupabase();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/onboarding` },
+    });
+    if (error) setMsg(translateAuthError(error));
   }
 
   return (
@@ -168,6 +194,20 @@ function AuthForm() {
           {loading ? "処理中..." : mode === "signup" ? "登録して次へ" : "ログイン"}
         </button>
       </form>
+
+      <div
+        className="muted"
+        style={{ textAlign: "center", margin: "16px 0 8px", fontSize: "0.85rem" }}
+      >
+        ── または ──
+      </div>
+      <button
+        type="button"
+        onClick={signInWithGoogle}
+        className="btn-secondary"
+      >
+        Google で続ける
+      </button>
 
       <p className="muted" style={{ textAlign: "center", marginTop: 12 }}>
         {mode === "signup" ? "アカウントをお持ちですか？ " : "はじめての方は "}

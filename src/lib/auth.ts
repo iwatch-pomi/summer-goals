@@ -63,30 +63,45 @@ export async function getCurrentUser() {
     username?: unknown;
     university?: unknown;
   };
-  const username =
-    typeof meta.username === "string" && meta.username.trim()
-      ? meta.username.trim().slice(0, 30)
-      : randomDisplayName();
+  // メール登録は username を持つ → 設定済み。Google 等は無い → onboarding で設定。
+  const hasUsername =
+    typeof meta.username === "string" && meta.username.trim().length > 0;
+  const displayName = hasUsername
+    ? (meta.username as string).trim().slice(0, 30)
+    : randomDisplayName();
   const university =
     typeof meta.university === "string" && meta.university.trim()
       ? meta.university.trim().slice(0, 60)
       : null;
 
-  // 初回ログイン時、同時並行のリクエスト（ページ＋API＋middleware等）が
-  // 同じユーザーを二重作成し unique 制約違反(P2002)で 500 になるのを防ぐ。
+  // 初回ログイン時の二重作成（email/displayName の unique 違反）を安全に処理する。
   try {
     return await prisma.user.create({
       data: {
         email: user.email,
-        displayName: username,
+        displayName,
         university,
+        profileComplete: hasUsername,
         avatarSeed: user.id,
       },
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      // 並行リクエストが先に作成済み → それを返す。
-      return prisma.user.findUnique({ where: { email: user.email } });
+      // 並行リクエストが email を先に作成済みなら、それを返す。
+      const byEmail = await prisma.user.findUnique({
+        where: { email: user.email },
+      });
+      if (byEmail) return byEmail;
+      // displayName 衝突 → 数字サフィックスを付けて再作成（login を壊さない）。
+      return prisma.user.create({
+        data: {
+          email: user.email,
+          displayName: `${displayName}${Math.floor(Math.random() * 100000)}`,
+          university,
+          profileComplete: hasUsername,
+          avatarSeed: user.id,
+        },
+      });
     }
     throw e;
   }

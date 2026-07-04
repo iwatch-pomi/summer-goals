@@ -60,8 +60,9 @@ enum SettlementStatus {
 model User {
   id                     String   @id @default(uuid())
   email                  String   @unique
-  displayName            String // 公開ユーザーネーム（登録時に本人が入力）
+  displayName            String   @unique // 公開ユーザーネーム（登録時に本人が入力・重複不可）
   university             String? // 大学名（任意・公開）
+  profileComplete        Boolean  @default(false) // ユーザーネーム設定済みか（Google初回は false→onboarding）
   avatarSeed             String // アバター生成用シード（匿名性担保）
   stripeCustomerId       String?  @unique // ユーザーごとの Stripe Customer ID
   defaultPaymentMethodId String? // SetupIntent で保存した支払い方法

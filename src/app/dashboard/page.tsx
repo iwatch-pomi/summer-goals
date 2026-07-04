@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChallengeStatus, GoalStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -19,6 +20,11 @@ export default async function DashboardPage() {
         </Link>
       </div>
     );
+  }
+
+  // ユーザーネーム未設定（Google初回など）はオンボーディングへ。
+  if (!user.profileComplete) {
+    redirect("/onboarding");
   }
 
   const paid = user.paidMember;
