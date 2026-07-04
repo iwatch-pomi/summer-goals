@@ -68,7 +68,8 @@ model User {
   cardRegistered         Boolean  @default(false)
   paidMember             Boolean  @default(false) // ¥3,500 決済成功で有料会員（アクティブ）
   timezone               String   @default("Asia/Tokyo")
-  status                 String   @default("ACTIVE")
+  status                 String   @default("ACTIVE") // ACTIVE / PENDING_DELETION
+  deletionScheduledAt    DateTime? // 退会申請時に now+7日。この時刻を過ぎたら完全削除
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

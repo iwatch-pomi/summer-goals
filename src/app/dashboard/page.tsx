@@ -110,6 +110,16 @@ export default async function DashboardPage() {
         <LogoutButton />
       </div>
 
+      {user.status === "PENDING_DELETION" && user.deletionScheduledAt && (
+        <div className="card" style={{ borderColor: "#fca5a5" }}>
+          <span className="badge">退会手続き中</span>
+          <p style={{ margin: "8px 0 0" }}>
+            {new Date(user.deletionScheduledAt).toLocaleDateString("ja-JP")}{" "}
+            に完全削除されます。<Link href="/account">取り消す</Link>
+          </p>
+        </div>
+      )}
+
       {summary && (
         <div className="card">
           <span className="badge">チャレンジ進行中</span>
@@ -189,6 +199,12 @@ export default async function DashboardPage() {
           </ul>
         )}
       </div>
+
+      <p className="sub" style={{ marginTop: 20 }}>
+        <Link href="/account" className="muted">
+          アカウント設定・退会
+        </Link>
+      </p>
     </div>
   );
 }
