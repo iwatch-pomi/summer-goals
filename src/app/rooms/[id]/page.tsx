@@ -76,6 +76,33 @@ export default async function RoomBoardPage({
   }
 
   const joined = room.members.some((m) => m.userId === user.id);
+
+  // メンバー限定: 非メンバー（未参加）には報告内容（本文・写真）を出さず、参加導線のみ。
+  if (!joined) {
+    return (
+      <div>
+        {header}
+        <p className="muted">👥 {room.members.length} 人が参加中</p>
+        <div className="card">
+          <p>この部屋のメンバー</p>
+          <ul className="muted">
+            {room.members.map((m) => (
+              <li key={m.id}>{m.user.displayName}</li>
+            ))}
+          </ul>
+          <p className="muted">メンバーの日々の報告は、参加すると見られます。</p>
+          {user.paidMember ? (
+            <JoinLeaveButton roomId={room.id} joined={false} />
+          ) : (
+            <Link href="/enroll" className="btn">
+              参加（¥3,500）して入室する
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const today = toDateOnly(jstDateString());
   const memberIds = room.members.map((m) => m.userId);
 
