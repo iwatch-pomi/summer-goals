@@ -42,6 +42,33 @@
    - Redirect URLs に `https://<あなたのVercelドメイン>/auth/callback` を追加
    （確認メールのリンクがこの `/auth/callback` に戻り、セッションが確立されます）
 
+### ソーシャルログイン（Google / Apple）
+
+アプリ側は実装済み。Supabase で各プロバイダを有効化すれば動く。共通の戻り先は
+Supabase の `https://<プロジェクト>.supabase.co/auth/v1/callback`（Supabase が案内）。
+
+**Google**（無料・簡単）
+1. Google Cloud Console → 「OAuth 2.0 クライアント ID」を作成（種類: ウェブ）。
+2. 承認済みリダイレクト URI に上記 Supabase コールバックを追加。
+3. Supabase → Authentication → Providers → **Google** を ON。クライアント ID/シークレットを登録。
+
+**Apple**（Apple Developer 有料登録が必要）
+1. Apple Developer → **Identifiers → Services ID** を作成（例 `com.example.summergoals.web`）。
+   これが Supabase の「Client IDs（Services ID）」になる。
+2. その Services ID の「Sign in with Apple」を Configure:
+   - Primary App ID: 対象の App ID（Sign in with Apple 有効）。
+   - **Domains**: `<プロジェクト>.supabase.co`（ドメイン検証は Supabase が処理するので自前ドメイン不要）
+   - **Return URLs**: `https://<プロジェクト>.supabase.co/auth/v1/callback`
+3. **Keys → +** で「Sign in with Apple」用の Key を作成し `.p8` をダウンロード（1回のみ）。
+   **Key ID** と（アカウントの）**Team ID** を控える。
+4. Supabase → Authentication → Providers → **Apple** を ON。
+   - Client IDs: 手順1の Services ID
+   - Secret Key: Team ID / Key ID / `.p8` から生成（Supabase の「Login with Apple」ガイドに生成手順あり）
+5. Site URL / Redirect URLs（上の 8）に本番ドメインが入っていることを確認。
+
+> 補足: 名前（ユーザーネーム）は Google/Apple では初回ログイン後の `/onboarding` で入力する
+> （匿名で使える）。プロバイダ未設定のうちは、そのボタンだけエラーになる。
+
 ---
 
 ## 2. Stripe（決済）
