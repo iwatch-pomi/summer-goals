@@ -20,6 +20,6 @@ export const DEPOSIT_YEN = Number(process.env.DEPOSIT_YEN ?? 3000); // 日割返
 export const TOTAL_CHARGE_YEN = SYSTEM_FEE_YEN + DEPOSIT_YEN; // 前払い総額 = 3500
 export const DAILY_FORFEIT_YEN = Number(process.env.DAILY_FORFEIT_YEN ?? 100); // サボり1日の失効額
 export const CHALLENGE_DURATION_DAYS = Number(process.env.CHALLENGE_DURATION_DAYS ?? 30);
-// 猶予日数。30日中この日数までは未報告でも失効しない（どうしても達成できない日用）。
+// 猶予日数。期間中この日数までは未報告でも失効しない（土日相当の8日）。
 // 返金 = min((報告成功日数 + GRACE_DAYS) × 100, 3000)。
-export const GRACE_DAYS = Number(process.env.GRACE_DAYS ?? 5);
+export const GRACE_DAYS = Number(process.env.GRACE_DAYS ?? 8);

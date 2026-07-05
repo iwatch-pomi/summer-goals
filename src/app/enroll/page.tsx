@@ -82,7 +82,7 @@ export default function EnrollPage() {
         <br />
         毎日報告すれば <strong>デポジットは全額（¥3,000）返金</strong> されます。サボった日数 × ¥100 が失効します。
         <br />
-        <strong>5日まではお休みOK</strong>（報告できない日が5日以内なら返金は減りません）。
+        <strong>8日まではお休みOK</strong>（報告できない日が8日以内なら返金は減りません）。
       </p>
       <div className="card">
         {!elements && !msg && (
