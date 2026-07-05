@@ -3,11 +3,16 @@ import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Summer Goals — ガチ目標達成マッチング",
+  title: "SummerGoals — ガチ目標達成",
   description:
     "夏休み限定。同じ目標を持つ大学生と匿名でペアを組み、毎日の進捗報告でガチで達成する。",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, title: "Summer Goals", statusBarStyle: "default" },
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
+  appleWebApp: { capable: true, title: "SummerGoals", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
