@@ -71,6 +71,126 @@ body {
   padding: 28px 20px 80px;
 }
 
+/* ---- ダッシュボード（Strava風3カラム）---- */
+/* 600px の container を突き抜けて全幅にし、中で 1120px 中央寄せ */
+.dash {
+  position: relative;
+  width: 100vw;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.dash-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+.dash-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+.dash-left > .card,
+.dash-right > .card {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+@media (min-width: 961px) {
+  .dash-left,
+  .dash-right {
+    position: sticky;
+    top: 84px;
+  }
+}
+@media (max-width: 960px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-card {
+  text-align: center;
+}
+.profile-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--grad);
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.profile-stats > div {
+  text-align: center;
+}
+.profile-stats .stat-num {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.streak-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 12px;
+}
+.streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.streak-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2f6;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.streak-dot.on {
+  background: var(--grad);
+  color: #fff;
+}
+.streak-wd {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.feed-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.feed-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
 /* ---- 見出し ---- */
 h1 {
   font-size: 1.6rem;
