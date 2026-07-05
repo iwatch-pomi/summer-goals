@@ -1,6 +1,6 @@
 import { ChallengeStatus, SettlementStatus } from "@prisma/client";
 import { prisma } from "./prisma";
-import { stripe } from "./stripe";
+import { stripe, GRACE_DAYS } from "./stripe";
 
 // ===========================================================================
 // 8月末の部分返金（精算）ロジック
@@ -57,7 +57,11 @@ export async function settleChallenge(
   });
   const successDays = days.length;
 
-  const refundAmount = Math.min(successDays * c.dailyForfeitYen, c.depositYen);
+  // 猶予日数（GRACE_DAYS）分を成功日数に加算 → その日数までの未報告は失効しない。
+  const refundAmount = Math.min(
+    (successDays + GRACE_DAYS) * c.dailyForfeitYen,
+    c.depositYen
+  );
   const forfeited = c.depositYen - refundAmount;
 
   try {

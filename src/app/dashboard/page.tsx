@@ -4,6 +4,7 @@ import { ChallengeStatus, GoalStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jstDateString, toDateOnly } from "@/lib/dates";
+import { GRACE_DAYS } from "@/lib/stripe";
 import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
@@ -69,7 +70,7 @@ export default async function DashboardPage() {
       summary = {
         successDays,
         refundEstimateYen: Math.min(
-          successDays * challenge.dailyForfeitYen,
+          (successDays + GRACE_DAYS) * challenge.dailyForfeitYen,
           challenge.depositYen
         ),
         daysRemaining: Math.max(
@@ -159,6 +160,8 @@ export default async function DashboardPage() {
                 報告成功 {summary.successDays} 日 ・ 残り {summary.daysRemaining} 日
                 <br />
                 ※毎日報告するほど返金額が増えます（1日 ¥100）。
+                <br />
+                ※{GRACE_DAYS}日までは報告できなくてもOK（返金は減りません）。
               </p>
             </div>
           )}
