@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body>
         <SiteHeader />
         <main className="container">{children}</main>
+        <SiteFooter />
         {/* PWA Service Worker 登録 */}
         <script
           dangerouslySetInnerHTML={{

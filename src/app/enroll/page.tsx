@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadStripe, type Stripe, type StripeElements } from "@stripe/stripe-js";
+import { LEGAL } from "@/lib/legal";
 
 // チャレンジ参加 = ¥3,500 前払いページ（2ステップ）。
 // Step1: 開始日を選ぶ（8/12〜9/10・30日間固定）。その期間の土日数を「お休みOK日数」として表示。
@@ -127,6 +128,25 @@ export default function EnrollPage() {
     router.push("/dashboard");
   }
 
+  // 決済画面の法務リンク（特商法は決済画面から辿れる必要がある）。
+  const legalNote = (
+    <p className="muted" style={{ marginTop: 12, fontSize: "0.82rem" }}>
+      参加すると{" "}
+      <a href={LEGAL.terms} target="_blank" rel="noopener noreferrer">
+        利用規約
+      </a>
+      ・
+      <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">
+        プライバシーポリシー
+      </a>
+      に同意したものとみなします。
+      <br />
+      <a href={LEGAL.tokushoho} target="_blank" rel="noopener noreferrer">
+        特定商取引法に基づく表記
+      </a>
+    </p>
+  );
+
   // ---- Step1: 開始日の選択 ----
   if (step === "date") {
     return (
@@ -165,6 +185,7 @@ export default function EnrollPage() {
         <button onClick={goToPayment} disabled={loading}>
           {loading ? "準備中..." : "次へ（お支払い）"}
         </button>
+        {legalNote}
       </div>
     );
   }
@@ -204,6 +225,7 @@ export default function EnrollPage() {
       <button onClick={submit} disabled={loading || !stripe}>
         {loading ? "処理中..." : `¥${(amount ?? 3500).toLocaleString()} を支払って参加`}
       </button>
+      {legalNote}
     </div>
   );
 }

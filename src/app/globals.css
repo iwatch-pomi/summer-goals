@@ -71,6 +71,36 @@ body {
   padding: 28px 20px 80px;
 }
 
+/* ---- フッター ---- */
+.site-footer {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+}
+.site-footer-links a {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.site-footer-links a:hover {
+  color: var(--slate);
+  text-decoration: underline;
+}
+.site-footer-copy {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 /* ---- ダッシュボード（Strava風3カラム）---- */
 /* 600px の container を突き抜けて全幅にし、中で 1120px 中央寄せ */
 .dash {
