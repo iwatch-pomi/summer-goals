@@ -25,6 +25,29 @@ const METHODS = [
   },
 ] as const;
 
+// 期間は30日固定。開始日だけ 8/12〜9/10 の間で選ぶ（enroll と同じ規則・env で上書き可）。
+const DURATION_DAYS = Number(
+  process.env.NEXT_PUBLIC_CHALLENGE_DURATION_DAYS ?? 30
+);
+const MIN_START =
+  process.env.NEXT_PUBLIC_CHALLENGE_MIN_START_DATE ?? "2026-08-12";
+const MAX_START =
+  process.env.NEXT_PUBLIC_CHALLENGE_MAX_START_DATE ?? "2026-09-10";
+
+function todayJstYmd(): string {
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+function addDaysYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function fmtJp(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  return `${Number(m)}/${Number(d)}`;
+}
+
 // 目標作成フォーム（個人・ソロ）。作成後は next（既定 /dashboard）へ戻る。
 // マッチングや部屋の作成には一切連動しない。
 export default function GoalForm({ next }: { next?: string }) {
@@ -34,9 +57,10 @@ export default function GoalForm({ next }: { next?: string }) {
   const [description, setDescription] = useState("");
   const [reportMethod, setReportMethod] = useState<"PHOTO" | "BUTTON" | "TIMER">("PHOTO");
   const [studyMinutes, setStudyMinutes] = useState("30"); // TIMER時の規定分
-  // 夏休み期間の既定値。
-  const [periodStart, setPeriodStart] = useState("2026-08-12");
-  const [periodEnd, setPeriodEnd] = useState("2026-09-30");
+  // 開始日は 8/12〜9/10（実下限は max(下限, 今日)）。終了日は開始+30日で自動確定。
+  const minStart = MIN_START > todayJstYmd() ? MIN_START : todayJstYmd();
+  const [periodStart, setPeriodStart] = useState(minStart);
+  const periodEnd = addDaysYmd(periodStart, DURATION_DAYS - 1);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -148,18 +172,17 @@ export default function GoalForm({ next }: { next?: string }) {
         </>
       )}
 
-      <label>開始日</label>
+      <label>開始日（{fmtJp(MIN_START)}〜{fmtJp(MAX_START)}）</label>
       <input
         type="date"
         value={periodStart}
+        min={minStart}
+        max={MAX_START}
         onChange={(e) => setPeriodStart(e.target.value)}
       />
-      <label>終了日</label>
-      <input
-        type="date"
-        value={periodEnd}
-        onChange={(e) => setPeriodEnd(e.target.value)}
-      />
+      <p className="muted" style={{ margin: "8px 0 0" }}>
+        期間は <strong>{DURATION_DAYS}日間</strong>（{fmtJp(periodStart)} 〜 {fmtJp(periodEnd)}）です。
+      </p>
 
       {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
       <button
@@ -167,6 +190,8 @@ export default function GoalForm({ next }: { next?: string }) {
         disabled={
           loading ||
           !title ||
+          periodStart < minStart ||
+          periodStart > MAX_START ||
           (reportMethod === "TIMER" && !(Number(studyMinutes) >= 1))
         }
       >
