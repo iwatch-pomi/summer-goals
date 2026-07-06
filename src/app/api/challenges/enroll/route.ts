@@ -9,8 +9,10 @@ import {
   TOTAL_CHARGE_YEN,
   DAILY_FORFEIT_YEN,
   CHALLENGE_DURATION_DAYS,
+  CHALLENGE_MIN_START_DATE,
+  CHALLENGE_MAX_START_DATE,
 } from "@/lib/stripe";
-import { toDateOnly, jstDateString } from "@/lib/dates";
+import { toDateOnly, jstDateString, addDays, countWeekendDays } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -37,13 +39,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 期間はサーバー設定のみで決める（クライアントからは受け取らない）。
-  // 開始日 = 環境変数 CHALLENGE_START_DATE があればそれ／無ければ今日(JST)。
-  // ★本番(8月一斉スタート)は CHALLENGE_START_DATE=2026-08-12 を設定する。
-  //   以前は body で startDate/endDate を上書きできたが、期間は返金判定に関わる
-  //   ため、改ざん防止としてクライアント入力を廃止した。
-  const startYmd = process.env.CHALLENGE_START_DATE ?? jstDateString();
+  // 開始日はユーザーが選択する（30日間は固定）。
+  // 範囲: max(8/12, 今日JST) 〜 9/10。過去日は不可（終了間際参加＋過去開始で
+  // 土日猶予だけ返金最大化…という抜け穴を防ぐため）。
+  const body = await req.json().catch(() => null);
+  const startYmd = body?.startDate as string | undefined;
+  const todayYmd = jstDateString();
+  const minStart =
+    CHALLENGE_MIN_START_DATE > todayYmd ? CHALLENGE_MIN_START_DATE : todayYmd;
+
+  if (
+    !startYmd ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(startYmd) ||
+    startYmd < minStart ||
+    startYmd > CHALLENGE_MAX_START_DATE
+  ) {
+    return NextResponse.json(
+      {
+        error: "invalid-start-date",
+        message: "開始日は8/12〜9/10の範囲で、今日以降を選んでください",
+      },
+      { status: 400 }
+    );
+  }
+
   const endYmd = addDays(startYmd, CHALLENGE_DURATION_DAYS - 1);
+  // 猶予日数 = 開始30日間に含まれる土日の数。
+  const graceDays = countWeekendDays(startYmd, CHALLENGE_DURATION_DAYS);
 
   // Stripe Customer を確保（setup/route.ts と同じロジック）。
   let customerId = user.stripeCustomerId;
@@ -60,21 +82,31 @@ export async function POST(req: NextRequest) {
   }
 
   // AWAITING_PAYMENT の Challenge を作成（既存の待機分があれば再利用）。
-  const challenge =
-    existing ??
-    (await prisma.challenge.create({
-      data: {
-        userId: user.id,
-        startDate: toDateOnly(startYmd),
-        endDate: toDateOnly(endYmd),
-        durationDays: CHALLENGE_DURATION_DAYS,
-        systemFeeYen: SYSTEM_FEE_YEN,
-        depositYen: DEPOSIT_YEN,
-        totalChargedYen: TOTAL_CHARGE_YEN,
-        dailyForfeitYen: DAILY_FORFEIT_YEN,
-        status: ChallengeStatus.AWAITING_PAYMENT,
-      },
-    }));
+  // 再利用時は、選び直した開始日を反映するため日付・猶予日数を更新する。
+  const challenge = existing
+    ? await prisma.challenge.update({
+        where: { id: existing.id },
+        data: {
+          startDate: toDateOnly(startYmd),
+          endDate: toDateOnly(endYmd),
+          durationDays: CHALLENGE_DURATION_DAYS,
+          graceDays,
+        },
+      })
+    : await prisma.challenge.create({
+        data: {
+          userId: user.id,
+          startDate: toDateOnly(startYmd),
+          endDate: toDateOnly(endYmd),
+          durationDays: CHALLENGE_DURATION_DAYS,
+          graceDays,
+          systemFeeYen: SYSTEM_FEE_YEN,
+          depositYen: DEPOSIT_YEN,
+          totalChargedYen: TOTAL_CHARGE_YEN,
+          dailyForfeitYen: DAILY_FORFEIT_YEN,
+          status: ChallengeStatus.AWAITING_PAYMENT,
+        },
+      });
 
   // ¥3,500 の PaymentIntent（即時キャプチャ）。
   // ★オーソリ保留は約7日で失効し30日保持できないため必ず capture する。
@@ -103,12 +135,8 @@ export async function POST(req: NextRequest) {
     challengeId: challenge.id,
     clientSecret: paymentIntent.client_secret,
     amount: TOTAL_CHARGE_YEN,
+    startDate: startYmd,
+    endDate: endYmd,
+    graceDays,
   });
-}
-
-// YYYY-MM-DD に日数を加算して YYYY-MM-DD を返す。
-function addDays(ymd: string, days: number): string {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
 }

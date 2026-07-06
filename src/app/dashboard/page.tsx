@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createSignedReportUrl } from "@/lib/supabase";
 import { jstDateString, toDateOnly } from "@/lib/dates";
-import { GRACE_DAYS } from "@/lib/stripe";
 import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
@@ -124,6 +123,7 @@ export default async function DashboardPage() {
   let refundEstimateYen = 0;
   let daysRemaining = 0;
   let inPeriod = false;
+  const graceDays = challenge?.graceDays ?? 0; // 表示用（このチャレンジの土日数）
   if (challenge) {
     const distinct = new Set(
       reports
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
     );
     successDays = distinct.size;
     refundEstimateYen = Math.min(
-      (successDays + GRACE_DAYS) * challenge.dailyForfeitYen,
+      (successDays + challenge.graceDays) * challenge.dailyForfeitYen,
       challenge.depositYen
     );
     const msPerDay = 1000 * 60 * 60 * 24;
@@ -202,7 +202,7 @@ export default async function DashboardPage() {
                 ))}
               </div>
               <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.8rem" }}>
-                残り {daysRemaining} 日 ・ {GRACE_DAYS}日までお休みOK
+                残り {daysRemaining} 日 ・ {graceDays}日までお休みOK
               </p>
             </div>
 

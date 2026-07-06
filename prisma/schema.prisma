@@ -134,6 +134,7 @@ model Challenge {
   depositYen      Int @default(3000) // 日割返金可（返金の上限）
   totalChargedYen Int @default(3500) // 前払い総額
   dailyForfeitYen Int @default(100) // サボり1日あたり失効額
+  graceDays       Int @default(8) // 猶予日数 = 開始30日間に含まれる土日数（参加時に確定）
 
   // Stripe（返金時に必要な ID を保持）
   stripePaymentIntentId String?                @unique
