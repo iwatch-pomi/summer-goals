@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChallengeStatus, Prisma } from "@prisma/client";
+import { ChallengeStatus, GoalStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { createServiceClient, STORAGE_BUCKET } from "@/lib/supabase";
@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
 
   if (!textContent) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
+  }
+
+  // 目標必須ゲートのバックストップ：進行中の目標が無ければ報告不可。
+  const goal = await prisma.goal.findFirst({
+    where: { userId: user.id, status: GoalStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (!goal) {
+    return NextResponse.json(
+      { error: "goal-required", message: "先に目標を作成してください" },
+      { status: 400 }
+    );
   }
 
   const reportDate = toDateOnly(jstDateString()); // 今日(JST)

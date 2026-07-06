@@ -35,7 +35,7 @@ export default function SiteHeader() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link href="/" className="logo">
+        <Link href={loggedIn ? "/dashboard" : "/"} className="logo">
           Summer<span>Goals</span>
         </Link>
 

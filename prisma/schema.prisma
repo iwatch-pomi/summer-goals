@@ -85,7 +85,7 @@ model User {
 model Goal {
   id            String     @id @default(uuid())
   userId        String
-  genre         GoalGenre
+  genre         GoalGenre? // 任意タグ（部屋分類にも流用可）。目標作成は部屋に連動しない。
   title         String
   description   String?
   dailyDeadline String     @default("23:59") // 締切時刻(JST)

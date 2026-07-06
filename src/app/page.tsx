@@ -76,7 +76,7 @@ export default function HomePage() {
         <div className="card">
           <ol className="muted">
             <li>¥3,500を前払い（参加費¥500＋デポジット¥3,000）</li>
-            <li>同じ目標の相方とマッチング（ソロ参加も可）</li>
+            <li>自分の目標を設定（部屋への参加は任意）</li>
             <li>毎日23:59までにテキスト＋写真で報告</li>
             <li>月末に「報告した日数 × ¥100」をデポジットから返金</li>
           </ol>

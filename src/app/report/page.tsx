@@ -1,61 +1,26 @@
-"use client";
+import { redirect } from "next/navigation";
+import { GoalStatus } from "@prisma/client";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import ReportForm from "@/components/ReportForm";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+export const dynamic = "force-dynamic";
 
-// 毎日の進捗報告フォーム（ソロ）。テキスト + 任意の写真。
-// 写真はサーバー(/api/reports)経由で非公開バケットへ安全にアップロードされる。
-export default function ReportPage() {
-  const router = useRouter();
-
-  const [text, setText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function submit() {
-    setLoading(true);
-    setMsg(null);
-
-    // multipart/form-data で送信（Content-Type はブラウザが自動設定）。
-    const fd = new FormData();
-    fd.append("textContent", text);
-    if (file) fd.append("photo", file);
-
-    const res = await fetch("/api/reports", { method: "POST", body: fd });
-    setLoading(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMsg(data?.message ?? "報告に失敗しました");
-      return;
-    }
-    router.push("/dashboard");
+// 報告ページ。報告の前に「目標」を必須にするゲート。
+// 進行中の目標が無ければ、先に目標作成へ誘導する（作成後この画面へ戻る）。
+export default async function ReportPage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/signup?mode=login");
   }
 
-  return (
-    <div>
-      <h1>今日の進捗報告</h1>
-      <p className="muted">23:59（JST）までに報告すればデポジットは失効しません。</p>
+  const goal = await prisma.goal.findFirst({
+    where: { userId: user.id, status: GoalStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (!goal) {
+    redirect("/goals/new?next=/report");
+  }
 
-      <label>今日やったこと</label>
-      <textarea
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="例: 単語100個 / スクワット50回"
-      />
-
-      <label>証拠写真（任意・5MBまで）</label>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-      />
-
-      {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
-      <button onClick={submit} disabled={loading || !text}>
-        {loading ? "送信中..." : "報告する"}
-      </button>
-    </div>
-  );
+  return <ReportForm />;
 }
