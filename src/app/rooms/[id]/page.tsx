@@ -155,9 +155,23 @@ export default async function RoomBoardPage({
             </div>
             {r && (
               <>
-                <p style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
-                  {r.textContent}
-                </p>
+                {r.studiedSeconds != null && (
+                  <span className="badge" style={{ marginTop: 8 }}>
+                    ⏱ {Math.round(r.studiedSeconds / 60)}分 集中
+                  </span>
+                )}
+                {r.textContent ? (
+                  <p style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
+                    {r.textContent}
+                  </p>
+                ) : (
+                  !photo &&
+                  r.studiedSeconds == null && (
+                    <p style={{ margin: "8px 0 0" }}>
+                      <strong style={{ color: "var(--green)" }}>✅ 勉強した</strong>
+                    </p>
+                  )
+                )}
                 {photo && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img

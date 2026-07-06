@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChallengeStatus, GoalStatus, Prisma } from "@prisma/client";
+import { ChallengeStatus, GoalStatus, ReportMethod, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { createServiceClient, STORAGE_BUCKET } from "@/lib/supabase";
@@ -35,23 +35,42 @@ export async function POST(req: NextRequest) {
   if (!form) {
     return NextResponse.json({ error: "invalid-form" }, { status: 400 });
   }
-  const textContent = (form.get("textContent") as string | null)?.trim();
+  const textContent = (form.get("textContent") as string | null)?.trim() ?? "";
   const photo = form.get("photo");
-
-  if (!textContent) {
-    return NextResponse.json({ error: "invalid-input" }, { status: 400 });
-  }
+  const hasPhoto = photo instanceof File && photo.size > 0;
+  const studiedSecondsRaw = Number(form.get("studiedSeconds"));
 
   // 目標必須ゲートのバックストップ：進行中の目標が無ければ報告不可。
+  // 報告方式は「最新の ACTIVE 目標」に従う（報告ページと同一ロジック）。
   const goal = await prisma.goal.findFirst({
     where: { userId: user.id, status: GoalStatus.ACTIVE },
-    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    select: { reportMethod: true, studyMinutes: true },
   });
   if (!goal) {
     return NextResponse.json(
       { error: "goal-required", message: "先に目標を作成してください" },
       { status: 400 }
     );
+  }
+
+  // 方式ごとの必須要件（サーバー側バックストップ）。
+  if (goal.reportMethod === ReportMethod.PHOTO && !hasPhoto) {
+    return NextResponse.json(
+      { error: "photo-required", message: "証拠写真を添付してください" },
+      { status: 400 }
+    );
+  }
+  let studiedSeconds: number | null = null;
+  if (goal.reportMethod === ReportMethod.TIMER) {
+    const target = (goal.studyMinutes ?? 0) * 60;
+    if (!Number.isFinite(studiedSecondsRaw) || studiedSecondsRaw < target) {
+      return NextResponse.json(
+        { error: "timer-incomplete", message: "規定の勉強時間に達していません" },
+        { status: 400 }
+      );
+    }
+    studiedSeconds = Math.round(studiedSecondsRaw);
   }
 
   const reportDate = toDateOnly(jstDateString()); // 今日(JST)
@@ -119,6 +138,7 @@ export async function POST(req: NextRequest) {
         reportDate,
         textContent,
         photoUrl: photoPath,
+        studiedSeconds,
       },
     });
     return NextResponse.json({ report }, { status: 201 });

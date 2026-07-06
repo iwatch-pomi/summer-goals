@@ -99,6 +99,7 @@ export default async function DashboardPage() {
     reportDate: Date;
     textContent: string;
     photoUrl: string | null;
+    studiedSeconds: number | null;
   }>;
 
   // 写真の署名URLをまとめて発行。
@@ -250,7 +251,21 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{r.textContent}</p>
+                  {r.studiedSeconds != null && (
+                    <span className="badge" style={{ marginTop: 10 }}>
+                      ⏱ {Math.round(r.studiedSeconds / 60)}分 集中
+                    </span>
+                  )}
+                  {r.textContent ? (
+                    <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{r.textContent}</p>
+                  ) : (
+                    !r.photoUrl &&
+                    r.studiedSeconds == null && (
+                      <p style={{ margin: "10px 0 0" }}>
+                        <strong style={{ color: "var(--green)" }}>✅ 勉強した</strong>
+                      </p>
+                    )
+                  )}
                   {signedUrls[i] && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

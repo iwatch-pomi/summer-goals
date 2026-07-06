@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoalGenre, GoalStatus } from "@prisma/client";
+import { GoalGenre, GoalStatus, ReportMethod } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { toDateOnly } from "@/lib/dates";
+
+const MAX_STUDY_MINUTES = 600; // タイマー規定時間の上限（10時間）
 
 // POST /api/goals
 // 個人の目標（ソロ）を作成する。マッチングや部屋作成には連動しない。
@@ -31,6 +33,29 @@ export async function POST(req: NextRequest) {
   const periodStart = body?.periodStart as string | undefined; // YYYY-MM-DD
   const periodEnd = body?.periodEnd as string | undefined;
 
+  // 報告方法。不正・未指定は PHOTO。
+  const methodRaw = body?.reportMethod as string | undefined;
+  const reportMethod =
+    methodRaw && Object.values(ReportMethod).includes(methodRaw as ReportMethod)
+      ? (methodRaw as ReportMethod)
+      : ReportMethod.PHOTO;
+
+  // TIMER のときだけ studyMinutes（正の整数・上限あり）を必須とする。
+  let studyMinutes: number | null = null;
+  if (reportMethod === ReportMethod.TIMER) {
+    const raw = Number(body?.studyMinutes);
+    if (!Number.isInteger(raw) || raw < 1 || raw > MAX_STUDY_MINUTES) {
+      return NextResponse.json(
+        {
+          error: "invalid-study-minutes",
+          message: `勉強時間は1〜${MAX_STUDY_MINUTES}分で指定してください`,
+        },
+        { status: 400 }
+      );
+    }
+    studyMinutes = raw;
+  }
+
   if (!title || !periodStart || !periodEnd) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
   }
@@ -54,6 +79,8 @@ export async function POST(req: NextRequest) {
       genre,
       title,
       description,
+      reportMethod,
+      studyMinutes,
       periodStart: toDateOnly(periodStart),
       periodEnd: toDateOnly(periodEnd),
       status: GoalStatus.ACTIVE,

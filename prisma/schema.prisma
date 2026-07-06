@@ -34,6 +34,13 @@ enum GoalStatus {
   CANCELLED // 取消・退会
 }
 
+/// 日々の報告方法（目標登録時に選ぶ）。
+enum ReportMethod {
+  PHOTO // 写真を提出して報告
+  BUTTON // 「勉強した」ボタンを押すだけ
+  TIMER // アプリ内タイマーで規定時間の勉強が必要
+}
+
 enum ChallengePaymentStatus {
   PENDING // 未決済
   PAID // ¥3,500 決済成功
@@ -83,16 +90,18 @@ model User {
 
 /// ユーザーが設定する個人の目標（ソロ）。genre はタグ・部屋分類に流用。
 model Goal {
-  id            String     @id @default(uuid())
+  id            String       @id @default(uuid())
   userId        String
   genre         GoalGenre? // 任意タグ（部屋分類にも流用可）。目標作成は部屋に連動しない。
   title         String
   description   String?
-  dailyDeadline String     @default("23:59") // 締切時刻(JST)
-  periodStart   DateTime   @db.Date
-  periodEnd     DateTime   @db.Date
-  status        GoalStatus @default(ACTIVE)
-  createdAt     DateTime   @default(now())
+  reportMethod  ReportMethod @default(PHOTO) // 日々の報告方法（写真／ボタン／タイマー）
+  studyMinutes  Int? // TIMER方式のときの規定勉強分数
+  dailyDeadline String       @default("23:59") // 締切時刻(JST)
+  periodStart   DateTime     @db.Date
+  periodEnd     DateTime     @db.Date
+  status        GoalStatus   @default(ACTIVE)
+  createdAt     DateTime     @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -106,8 +115,9 @@ model Report {
   userId      String
   challengeId String // ソロ報告は必ず自分の進行中チャレンジに紐づく
   reportDate  DateTime @db.Date // 対象日(JST)
-  textContent String
+  textContent String // メモ（方式により任意。未入力は空文字）
   photoUrl    String? // 非公開バケット上のパス（表示時に署名URLを発行）
+  studiedSeconds Int? // TIMER方式で集中した秒数（フィード表示に使用）
   createdAt   DateTime @default(now())
 
   user      User      @relation(fields: [userId], references: [id])
