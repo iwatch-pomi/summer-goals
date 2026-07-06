@@ -11,10 +11,15 @@ const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ""
 );
 
-const DURATION_DAYS = 30;
-// サーバーの CHALLENGE_MIN/MAX_START_DATE 既定値に合わせる（実下限は max(下限, 今日)）。
-const MIN_START = "2026-08-12";
-const MAX_START = "2026-09-10";
+// サーバーの CHALLENGE_* 既定値に合わせる（実下限は max(下限, 今日)）。
+// テスト時は NEXT_PUBLIC_ 変数で前倒し可能（設定＋再デプロイが必要）。
+const DURATION_DAYS = Number(
+  process.env.NEXT_PUBLIC_CHALLENGE_DURATION_DAYS ?? 30
+);
+const MIN_START =
+  process.env.NEXT_PUBLIC_CHALLENGE_MIN_START_DATE ?? "2026-08-12";
+const MAX_START =
+  process.env.NEXT_PUBLIC_CHALLENGE_MAX_START_DATE ?? "2026-09-10";
 
 // --- 日付ユーティリティ（サーバー lib/dates と同じ計算をクライアントでも行う）---
 function todayJstYmd(): string {
