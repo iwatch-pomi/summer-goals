@@ -37,10 +37,16 @@ export async function settleChallenge(
   challengeId: string
 ): Promise<SettleChallengeResult> {
   const c = await prisma.challenge.findUnique({ where: { id: challengeId } });
+  // PENDING（初回）に加え、REFUND_FAILED（前回失敗）も再試行対象にする。
+  // 失敗が放置されると返金が永久に届かないため。二重返金は下の既存返金チェックで防ぐ。
+  const retriable =
+    !!c &&
+    (c.settlementStatus === SettlementStatus.PENDING ||
+      c.settlementStatus === SettlementStatus.REFUND_FAILED);
   if (
     !c ||
     c.status !== ChallengeStatus.ACTIVE ||
-    c.settlementStatus !== SettlementStatus.PENDING ||
+    !retriable ||
     c.paymentStatus !== "PAID"
   ) {
     return { status: "SKIPPED", refundAmountYen: 0 };
@@ -69,19 +75,33 @@ export async function settleChallenge(
     let refundId: string | null = null;
 
     if (refundAmount > 0) {
-      // payment_intent でも charge でも返金可能。要件どおり PaymentIntent を使用。
-      const refund = await stripe.refunds.create(
-        {
-          payment_intent: c.stripePaymentIntentId ?? undefined,
-          amount: refundAmount, // 円そのまま（×100 しない）
-          metadata: {
-            challengeId: c.id,
-            successDays: String(successDays),
+      // 二重返金の防止（重要・資金）:
+      // idempotencyKey は Stripe 側で約24hしか保持されないため、跨日リトライでは
+      // 失効し新規返金が作られてしまう。そこで、まず既存の返金を照会し、
+      // この PaymentIntent に返金が既にあれば再利用して二重返金を避ける。
+      if (c.stripePaymentIntentId) {
+        const prior = await stripe.refunds.list({
+          payment_intent: c.stripePaymentIntentId,
+          limit: 1,
+        });
+        if (prior.data.length > 0) refundId = prior.data[0].id;
+      }
+
+      if (!refundId) {
+        // payment_intent でも charge でも返金可能。要件どおり PaymentIntent を使用。
+        const refund = await stripe.refunds.create(
+          {
+            payment_intent: c.stripePaymentIntentId ?? undefined,
+            amount: refundAmount, // 円そのまま（×100 しない）
+            metadata: {
+              challengeId: c.id,
+              successDays: String(successDays),
+            },
           },
-        },
-        { idempotencyKey: `refund_${c.id}` } // 二重返金を防ぐ
-      );
-      refundId = refund.id;
+          { idempotencyKey: `refund_${c.id}` } // 同日中の重複作成を防ぐ
+        );
+        refundId = refund.id;
+      }
     }
 
     await prisma.challenge.update({
@@ -139,7 +159,10 @@ export async function runSettlement(
   const targets = await prisma.challenge.findMany({
     where: {
       status: ChallengeStatus.ACTIVE,
-      settlementStatus: SettlementStatus.PENDING,
+      // 初回（PENDING）＋前回失敗（REFUND_FAILED）を対象に、失敗分を再試行する。
+      settlementStatus: {
+        in: [SettlementStatus.PENDING, SettlementStatus.REFUND_FAILED],
+      },
       paymentStatus: "PAID",
       endDate: { lte: now },
     },

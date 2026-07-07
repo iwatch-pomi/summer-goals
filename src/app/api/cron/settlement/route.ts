@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSettlement } from "@/lib/settlement";
+import { isAuthorizedCron } from "@/lib/cron";
 
 export const runtime = "nodejs";
 // Vercel Hobby（無料枠）の関数実行上限は 60 秒。これを超えない設定にする。
@@ -15,9 +16,7 @@ export const maxDuration = 60;
 //
 // 手動検証時は ?now=YYYY-MM-DD で基準日を指定可能。
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!isAuthorizedCron(req.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
