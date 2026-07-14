@@ -10,7 +10,7 @@ import CheerButton from "@/components/CheerButton";
 
 export const dynamic = "force-dynamic";
 
-// 共有プロフィール（ログイン不要）。SNS に貼って「宣言」する用の公開ページ。
+// 共有プロフィール（ログイン不要）。SNS に貼れる公開ページ。
 export default async function ProfilePage({ params }: { params: { name: string } }) {
   const displayName = decodeURIComponent(params.name);
   const viewer = await getCurrentUser();
@@ -24,7 +24,7 @@ export default async function ProfilePage({ params }: { params: { name: string }
     return (
       <div>
         <h1>ユーザーが見つかりません</h1>
-        <Link href="/feed" className="btn">みんなの宣言へ</Link>
+        <Link href="/feed" className="btn">みんなの進捗へ</Link>
       </div>
     );
   }
@@ -46,6 +46,7 @@ export default async function ProfilePage({ params }: { params: { name: string }
       id: true,
       reportDate: true,
       textContent: true,
+      pagesRead: true,
       photoUrl: true,
       studiedSeconds: true,
       goal: { select: { title: true } },
@@ -54,6 +55,7 @@ export default async function ProfilePage({ params }: { params: { name: string }
     id: string;
     reportDate: Date;
     textContent: string;
+    pagesRead: number | null;
     photoUrl: string | null;
     studiedSeconds: number | null;
     goal: { title: string };
@@ -110,15 +112,15 @@ export default async function ProfilePage({ params }: { params: { name: string }
         </div>
       </div>
 
-      <h3 style={{ marginTop: 20 }}>宣言</h3>
+      <h3 style={{ marginTop: 20 }}>取り組み中の参考書</h3>
       {goals.length === 0 ? (
-        <p className="muted">公開中の宣言はありません。</p>
+        <p className="muted">公開中の参考書はありません。</p>
       ) : (
         goals.map((g) => (
           <div className="card" key={g.id}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div>
-                <p style={{ margin: 0, fontWeight: 700 }}>🎯 {g.title}</p>
+                <p style={{ margin: 0, fontWeight: 700 }}>📖 {g.title}</p>
                 {g.description && <p className="muted" style={{ margin: "4px 0 0" }}>{g.description}</p>}
               </div>
               <CheerButton
@@ -143,21 +145,25 @@ export default async function ProfilePage({ params }: { params: { name: string }
               <div>
                 <strong>{owner.displayName}</strong>
                 <div className="muted" style={{ fontSize: "0.82rem" }}>
-                  🎯 {r.goal.title} ・{" "}
+                  📖 {r.goal.title} ・{" "}
                   {r.reportDate.toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" })}
                 </div>
               </div>
             </div>
-            {r.studiedSeconds != null && (
-              <span className="badge" style={{ marginTop: 10 }}>
-                ⏱ {Math.round(r.studiedSeconds / 60)}分 集中
-              </span>
-            )}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {r.pagesRead != null && (
+                <span className="badge">📖 {r.pagesRead}ページ</span>
+              )}
+              {r.studiedSeconds != null && (
+                <span className="badge">⏱ {Math.round(r.studiedSeconds / 60)}分 集中</span>
+              )}
+            </div>
             {r.textContent ? (
               <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{r.textContent}</p>
             ) : (
               !r.photoUrl &&
-              r.studiedSeconds == null && (
+              r.studiedSeconds == null &&
+              r.pagesRead == null && (
                 <p style={{ margin: "10px 0 0" }}>
                   <strong style={{ color: "var(--green)" }}>✅ 勉強した</strong>
                 </p>

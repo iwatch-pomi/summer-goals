@@ -46,11 +46,10 @@ export async function purgeUser(userId: string) {
     await service.storage.from(STORAGE_BUCKET).remove(paths).catch(() => {});
   }
 
-  // 2. DB を依存順に削除（Report.userId と Room.createdById は RESTRICT のため先に）。
-  //    User 削除で Goal / RoomMember / Cheer は Cascade で消える。
+  // 2. DB を依存順に削除（Report.userId は RESTRICT のため先に）。
+  //    User 削除で Goal / Cheer は Cascade で消える。
   await prisma.$transaction([
     prisma.report.deleteMany({ where: { userId } }),
-    prisma.room.deleteMany({ where: { createdById: userId } }),
     prisma.user.delete({ where: { id: userId } }),
   ]);
 

@@ -1,8 +1,8 @@
 // ===========================================================================
-// summer-goals — Prisma スキーマ
-// 「公開宣言（宣言効果）」型の目標達成サービスのデータモデル。
-// 目標＝公開宣言 / 日々の報告＝公開の進捗 / 応援（エール）＝ワンタップ支援。
-// 決済（デポジット・返金）は撤去済み。
+// 参考書ランキング — Prisma スキーマ
+// 「参考書・教科書の進捗を報告して競い合う」学習サービスのデータモデル。
+// 参考書（取り組み）＝Goal / 日々の進捗（ページ数）＝Report /
+// 応援（エール）＝ワンタップ支援。決済・勉強部屋は撤去済み。
 // ===========================================================================
 
 generator client {
@@ -17,12 +17,16 @@ datasource db {
 
 // ---- enum ----------------------------------------------------------------
 
+/// 科目タグ（受験・資格向け）。参考書・ランキングの絞り込みに使う。
 enum GoalGenre {
-  ENGLISH // 英語学習
-  MUSCLE_TRAINING // 筋トレ
-  STUDY // 勉強・資格
-  READING // 読書
-  DIET // ダイエット
+  ENGLISH // 英語
+  MATH // 数学
+  JAPANESE // 国語
+  SCIENCE // 理科
+  SOCIAL // 社会
+  TOEIC // TOEIC
+  QUALIFICATION // 資格
+  MAJOR // 専門科目
   OTHER // その他
 }
 
@@ -56,23 +60,22 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  goals           Goal[]
-  reports         Report[]
-  roomsCreated    Room[]       @relation("RoomCreator")
-  roomMemberships RoomMember[]
-  cheers          Cheer[]
+  goals   Goal[]
+  reports Report[]
+  cheers  Cheer[]
 }
 
-/// ユーザーが設定する目標＝公開宣言。
+/// ユーザーが取り組む参考書・教科書（title＝参考書名）。公開の取り組み。
 model Goal {
   id            String       @id @default(uuid())
   userId        String
-  genre         GoalGenre? // 任意タグ
+  genre         GoalGenre? // 科目タグ（任意）
   title         String
   description   String?
+  totalPages    Int? // 参考書の総ページ数（任意・進捗バー用）
   reportMethod  ReportMethod @default(PHOTO) // 日々の報告方法（写真／ボタン／タイマー）
   studyMinutes  Int? // TIMER方式のときの規定勉強分数
-  isPublic      Boolean      @default(true) // 公開宣言（既定で公開）
+  isPublic      Boolean      @default(true) // 公開（既定で公開）
   dailyDeadline String       @default("23:59") // 締切時刻(JST)
   periodStart   DateTime     @db.Date
   periodEnd     DateTime     @db.Date
@@ -95,6 +98,7 @@ model Report {
   goalId         String // 報告は目標（宣言）に紐づく
   reportDate     DateTime @db.Date // 対象日(JST)
   textContent    String // メモ（方式により任意。未入力は空文字）
+  pagesRead      Int? // その日進めたページ数（ランキングの基礎）
   photoUrl       String? // 非公開バケット上のパス（表示時に署名URLを発行）
   studiedSeconds Int? // TIMER方式で集中した秒数（表示に使用）
   createdAt      DateTime @default(now())
@@ -121,39 +125,8 @@ model Cheer {
   goal   Goal?   @relation(fields: [goalId], references: [id], onDelete: Cascade)
   report Report? @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, goalId]) // 同一宣言に二重応援不可（NULL は複数可）
+  @@unique([userId, goalId]) // 同一取り組みに二重応援不可（NULL は複数可）
   @@unique([userId, reportId]) // 同一報告に二重応援不可
   @@index([goalId])
   @@index([reportId])
-}
-
-/// 一緒に取り組む「部屋」。報告ボード（メンバーの当日報告を見せ合う）用。
-model Room {
-  id          String     @id @default(uuid())
-  name        String
-  description String?
-  genre       GoalGenre? // 任意のジャンルタグ
-  createdById String
-  maxMembers  Int        @default(20)
-  createdAt   DateTime   @default(now())
-
-  createdBy User         @relation("RoomCreator", fields: [createdById], references: [id])
-  members   RoomMember[]
-
-  @@index([createdAt])
-}
-
-/// 部屋への参加（1人が複数部屋に参加可）。
-model RoomMember {
-  id       String   @id @default(uuid())
-  roomId   String
-  userId   String
-  joinedAt DateTime @default(now())
-
-  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([roomId, userId]) // 二重入室防止
-  @@index([userId])
-  @@index([roomId])
 }

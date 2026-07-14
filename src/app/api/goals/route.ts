@@ -26,6 +26,21 @@ export async function POST(req: NextRequest) {
   const periodStart = body?.periodStart as string | undefined; // YYYY-MM-DD
   const periodEnd = body?.periodEnd as string | undefined;
 
+  // 総ページ数（任意）。1〜9999の整数のみ採用、それ以外は null。
+  let totalPages: number | null = null;
+  const totalPagesRaw = body?.totalPages;
+  if (totalPagesRaw != null && String(totalPagesRaw).trim() !== "") {
+    const n = Number(totalPagesRaw);
+    if (Number.isInteger(n) && n >= 1 && n <= 9999) {
+      totalPages = n;
+    } else {
+      return NextResponse.json(
+        { error: "invalid-total-pages", message: "総ページ数は1〜9999の整数で入力してください" },
+        { status: 400 }
+      );
+    }
+  }
+
   // 報告方法。不正・未指定は PHOTO。
   const methodRaw = body?.reportMethod as string | undefined;
   const reportMethod =
@@ -53,18 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid-input" }, { status: 400 });
   }
 
-  // ジャンル指定時のみ「1ユーザー1ジャンル同時1件」に制限（未指定は複数可）。
-  if (genre) {
-    const dup = await prisma.goal.findFirst({
-      where: { userId: user.id, genre, status: GoalStatus.ACTIVE },
-    });
-    if (dup) {
-      return NextResponse.json(
-        { error: "duplicate-genre", message: "同じジャンルの目標がすでにあります" },
-        { status: 409 }
-      );
-    }
-  }
+  // 同じ科目で複数の参考書を並行できるよう、科目の重複制限は設けない。
 
   const goal = await prisma.goal.create({
     data: {
@@ -72,6 +76,7 @@ export async function POST(req: NextRequest) {
       genre,
       title,
       description,
+      totalPages,
       reportMethod,
       studyMinutes,
       periodStart: toDateOnly(periodStart),

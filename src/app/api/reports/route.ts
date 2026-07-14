@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
   const hasPhoto = photo instanceof File && photo.size > 0;
   const studiedSecondsRaw = Number(form.get("studiedSeconds"));
 
+  // 今日進めたページ数（任意・ランキングの基礎）。0〜9999の非負整数のみ採用、それ以外は null。
+  const pagesReadRaw = form.get("pagesRead");
+  let pagesRead: number | null = null;
+  if (pagesReadRaw != null && String(pagesReadRaw).trim() !== "") {
+    const n = Number(pagesReadRaw);
+    if (Number.isInteger(n) && n >= 0 && n <= 9999) {
+      pagesRead = n;
+    } else {
+      return NextResponse.json(
+        { error: "invalid-pages", message: "ページ数は0〜9999の整数で入力してください" },
+        { status: 400 }
+      );
+    }
+  }
+
   const reportDate = toDateOnly(jstDateString()); // 今日(JST)
 
   // 対象の目標（宣言）を解決。指定があれば本人所有＆ACTIVE、無ければ最新の ACTIVE 目標。
@@ -56,7 +71,7 @@ export async function POST(req: NextRequest) {
       });
   if (!goal) {
     return NextResponse.json(
-      { error: "goal-required", message: "先に目標を宣言してください" },
+      { error: "goal-required", message: "先に参考書を登録してください" },
       { status: 400 }
     );
   }
@@ -64,7 +79,7 @@ export async function POST(req: NextRequest) {
   // 期間チェック（宣言した期間内のみ報告できる）。
   if (reportDate < goal.periodStart || reportDate > goal.periodEnd) {
     return NextResponse.json(
-      { error: "out-of-period", message: "宣言した期間外です" },
+      { error: "out-of-period", message: "登録した期間外です" },
       { status: 403 }
     );
   }
@@ -130,6 +145,7 @@ export async function POST(req: NextRequest) {
         goalId: goal.id,
         reportDate,
         textContent,
+        pagesRead,
         photoUrl: photoPath,
         studiedSeconds,
       },

@@ -8,7 +8,7 @@ import { createBrowserSupabase } from "@/lib/supabase-browser";
 // 全ページ共通ヘッダー（Amazon型）。ログイン状態に応じて右側の導線を出し分ける。
 // - 未ログイン: 「ログイン」＋「新規登録」
 // - ログイン済: 「マイページ」＋「ログアウト」
-// - どちらでも: ロゴ／「部屋」リンク（部屋一覧は公開）
+// - どちらでも: ロゴ／「みんなの進捗」「ランキング」リンク（公開）
 export default function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -36,19 +36,19 @@ export default function SiteHeader() {
     <header className="site-header">
       <div className="site-header-inner">
         <Link href={loggedIn ? "/dashboard" : "/"} className="logo">
-          Summer<span>Goals</span>
+          ススメ<span>ランキング</span>
         </Link>
 
         <nav style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* ログイン/新規登録画面では右側の導線を出さない */}
           {!onAuthPage && (
-            <Link href="/feed" className="muted" style={{ fontWeight: 700 }}>
-              みんなの宣言
+            <Link href="/ranking" className="muted" style={{ fontWeight: 700 }}>
+              ランキング
             </Link>
           )}
           {!onAuthPage && (
-            <Link href="/rooms" className="muted" style={{ fontWeight: 700 }}>
-              部屋
+            <Link href="/feed" className="muted" style={{ fontWeight: 700 }}>
+              みんなの進捗
             </Link>
           )}
 

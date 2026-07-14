@@ -1,8 +1,8 @@
 {
-  "name": "summer-goals",
+  "name": "sansho-ranking",
   "version": "0.1.0",
   "private": true,
-  "description": "「ガチ」目標達成マッチングアプリ MVP — 夏休み限定（8月〜9月）",
+  "description": "参考書・教科書の進捗を報告して競い合う学習ランキングサービス",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -19,9 +19,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "next": "^14.2.33",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "stripe": "^16.12.0",
-    "@stripe/stripe-js": "^4.7.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.16.11",

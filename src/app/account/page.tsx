@@ -53,7 +53,7 @@ export default async function AccountPage() {
         <div className="card" style={{ borderColor: "#fca5a5" }}>
           <strong>退会</strong>
           <p className="muted">
-            退会すると、{GRACE_DAYS}日間の猶予のあと、目標・報告・写真・部屋を含む
+            退会すると、{GRACE_DAYS}日間の猶予のあと、参考書・報告・写真・応援を含む
             すべてのデータが完全に削除されます（猶予中は取り消し可能）。
           </p>
           <DeactivateButton />

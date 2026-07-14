@@ -9,7 +9,7 @@ import { computeStreak, weekStatus, reportedDateSet, WEEKDAY_LABELS } from "@/li
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
 
-// マイページ（Strava風3カラム）。左=プロフィール+ストリーク / 中央=進捗フィード / 右=宣言・部屋。
+// マイページ（Strava風3カラム）。左=プロフィール+ストリーク / 中央=進捗フィード / 右=参考書・ランキング。
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -46,11 +46,12 @@ export default async function DashboardPage() {
   const reports = (await prisma.report.findMany({
     where: { userId: user.id },
     orderBy: { reportDate: "desc" },
-    select: { id: true, reportDate: true, textContent: true, photoUrl: true, studiedSeconds: true },
+    select: { id: true, reportDate: true, textContent: true, pagesRead: true, photoUrl: true, studiedSeconds: true },
   })) as Array<{
     id: string;
     reportDate: Date;
     textContent: string;
+    pagesRead: number | null;
     photoUrl: string | null;
     studiedSeconds: number | null;
   }>;
@@ -81,12 +82,6 @@ export default async function DashboardPage() {
     where: {
       OR: [{ goal: { userId: user.id } }, { report: { userId: user.id } }],
     },
-  });
-
-  const myRooms = await prisma.roomMember.findMany({
-    where: { userId: user.id },
-    include: { room: { select: { id: true, name: true } } },
-    orderBy: { joinedAt: "desc" },
   });
 
   const initial = user.displayName.trim().charAt(0) || "S";
@@ -163,18 +158,18 @@ export default async function DashboardPage() {
             )}
             {!activeGoal && (
               <div className="card" style={{ marginTop: 0 }}>
-                <strong>まず目標を宣言しましょう</strong>
+                <strong>まず参考書を登録しましょう</strong>
                 <p className="muted" style={{ margin: "6px 0 0" }}>
-                  みんなに公言すると、視線と応援で続けやすくなります。
+                  取り組む参考書を登録すると、進捗を報告してランキングに参加できます。
                 </p>
                 <Link href="/goals/new" className="btn" style={{ marginTop: 12 }}>
-                  目標を宣言する
+                  参考書を登録する
                 </Link>
               </div>
             )}
             {activeGoal && !inPeriod && (
               <div className="card" style={{ marginTop: 0 }}>
-                <p className="muted" style={{ margin: 0 }}>宣言した期間に入ると報告できます。</p>
+                <p className="muted" style={{ margin: 0 }}>登録した期間に入ると報告できます。</p>
               </div>
             )}
 
@@ -199,16 +194,20 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  {r.studiedSeconds != null && (
-                    <span className="badge" style={{ marginTop: 10 }}>
-                      ⏱ {Math.round(r.studiedSeconds / 60)}分 集中
-                    </span>
-                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                    {r.pagesRead != null && (
+                      <span className="badge">📖 {r.pagesRead}ページ</span>
+                    )}
+                    {r.studiedSeconds != null && (
+                      <span className="badge">⏱ {Math.round(r.studiedSeconds / 60)}分 集中</span>
+                    )}
+                  </div>
                   {r.textContent ? (
                     <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{r.textContent}</p>
                   ) : (
                     !r.photoUrl &&
-                    r.studiedSeconds == null && (
+                    r.studiedSeconds == null &&
+                    r.pagesRead == null && (
                       <p style={{ margin: "10px 0 0" }}>
                         <strong style={{ color: "var(--green)" }}>✅ 勉強した</strong>
                       </p>
@@ -232,16 +231,16 @@ export default async function DashboardPage() {
             )}
           </main>
 
-          {/* ===== 右：宣言 ＋ 部屋 ===== */}
+          {/* ===== 右：参考書 ＋ ランキング ＋ みんなの進捗 ===== */}
           <aside className="dash-right">
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong>あなたの宣言</strong>
+                <strong>あなたの参考書</strong>
                 <Link href="/goals/new" className="muted">追加 →</Link>
               </div>
               {goals.length === 0 ? (
                 <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
-                  まだ宣言がありません。
+                  まだ参考書がありません。
                 </p>
               ) : (
                 <ul className="muted" style={{ margin: "8px 0 0", paddingLeft: "1.1em" }}>
@@ -257,32 +256,22 @@ export default async function DashboardPage() {
 
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong>みんなの宣言</strong>
-                <Link href="/feed" className="muted">見る →</Link>
+                <strong>ランキング</strong>
+                <Link href="/ranking" className="muted">見る →</Link>
               </div>
               <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
-                他の人の宣言と進捗を見て、応援しよう。
+                今週の進捗ページ数・連続報告日数でみんなと競おう。
               </p>
             </div>
 
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong>勉強部屋</strong>
-                <Link href="/rooms" className="muted">さがす →</Link>
+                <strong>みんなの進捗</strong>
+                <Link href="/feed" className="muted">見る →</Link>
               </div>
-              {myRooms.length === 0 ? (
-                <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
-                  まだ部屋に参加していません。
-                </p>
-              ) : (
-                <ul className="muted" style={{ margin: "8px 0 0", paddingLeft: "1.1em" }}>
-                  {myRooms.map((m) => (
-                    <li key={m.id}>
-                      <Link href={`/rooms/${m.room.id}`}>{m.room.name}</Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
+                他の人の参考書と進捗を見て、応援しよう。
+              </p>
             </div>
           </aside>
         </div>

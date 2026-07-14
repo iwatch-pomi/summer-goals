@@ -1,7 +1,7 @@
 {
-  "name": "Summer Goals — ガチ目標達成マッチング",
-  "short_name": "Summer Goals",
-  "description": "夏休み限定。匿名でペアを組み、毎日の進捗報告でガチに目標達成。",
+  "name": "ススメ — 参考書ランキング",
+  "short_name": "ススメ",
+  "description": "参考書・教科書の進捗を報告して、みんなとランキングで競い合う学習サービス。",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f8fafc",

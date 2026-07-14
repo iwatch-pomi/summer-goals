@@ -2,17 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SUBJECTS } from "@/lib/subjects";
 
-// ジャンルは任意タグ。「選択しない」を先頭に置く。
-const GENRES = [
-  { value: "", label: "選択しない" },
-  { value: "ENGLISH", label: "英語学習" },
-  { value: "MUSCLE_TRAINING", label: "筋トレ" },
-  { value: "STUDY", label: "勉強・資格" },
-  { value: "READING", label: "読書" },
-  { value: "DIET", label: "ダイエット" },
-  { value: "OTHER", label: "その他" },
-];
+// 科目は任意タグ。「選択しない」を先頭に置く。
+const GENRES = [{ value: "", label: "選択しない" }, ...SUBJECTS];
 
 // 日々の報告方法（目標登録時に選ぶ）。
 const METHODS = [
@@ -45,6 +38,7 @@ export default function GoalForm({ next }: { next?: string }) {
   const [genre, setGenre] = useState(""); // 既定は「選択しない」
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [totalPages, setTotalPages] = useState(""); // 総ページ数（任意）
   const [reportMethod, setReportMethod] = useState<"PHOTO" | "BUTTON" | "TIMER">("PHOTO");
   const [studyMinutes, setStudyMinutes] = useState("30"); // TIMER時の規定分
   // 開始日は今日以降。期間（日数）は既定30日で編集可。終了日は自動確定。
@@ -66,6 +60,7 @@ export default function GoalForm({ next }: { next?: string }) {
         genre: genre || undefined, // 空文字は送らない（任意）
         title,
         description,
+        totalPages: totalPages.trim() !== "" ? Number(totalPages) : undefined,
         reportMethod,
         studyMinutes: reportMethod === "TIMER" ? Number(studyMinutes) : undefined,
         periodStart,
@@ -84,27 +79,28 @@ export default function GoalForm({ next }: { next?: string }) {
 
   return (
     <div>
-      <h1>目標を宣言する</h1>
+      <h1>参考書・教科書を登録する</h1>
       <p className="muted">
-        みんなに公言する目標です。宣言すると<strong>公開プロフィール・タイムライン</strong>に載り、
-        日々の進捗も公開されます。人の視線と応援が、達成を後押しします。
+        取り組む参考書・教科書を登録します。登録すると<strong>公開プロフィール・タイムライン・ランキング</strong>に反映され、
+        日々の進捗ページ数でみんなと競い合えます。
       </p>
 
-      <label>目標（タイトル）</label>
+      <label>参考書名（タイトル）</label>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="例: TOEIC 800点 / 毎日腕立て50回"
+        placeholder="例: システム英単語 / 青チャートIA / TOEIC公式問題集7"
       />
 
-      <label>詳細（任意）</label>
+      <label>詳細・目標（任意）</label>
       <textarea
         rows={3}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
+        placeholder="例: 夏までに2周する"
       />
 
-      <label>ジャンル（任意）</label>
+      <label>科目（任意）</label>
       <select value={genre} onChange={(e) => setGenre(e.target.value)}>
         {GENRES.map((g) => (
           <option key={g.value} value={g.value}>
@@ -112,6 +108,17 @@ export default function GoalForm({ next }: { next?: string }) {
           </option>
         ))}
       </select>
+
+      <label>総ページ数（任意）</label>
+      <input
+        type="number"
+        min={1}
+        max={9999}
+        inputMode="numeric"
+        value={totalPages}
+        onChange={(e) => setTotalPages(e.target.value)}
+        placeholder="例: 320"
+      />
 
       <label>報告方法</label>
       <div style={{ display: "grid", gap: 8 }}>
@@ -195,7 +202,7 @@ export default function GoalForm({ next }: { next?: string }) {
           (reportMethod === "TIMER" && !(Number(studyMinutes) >= 1))
         }
       >
-        {loading ? "宣言中..." : "宣言する"}
+        {loading ? "登録中..." : "参考書を登録する"}
       </button>
     </div>
   );

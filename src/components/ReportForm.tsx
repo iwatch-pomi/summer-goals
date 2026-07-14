@@ -21,6 +21,7 @@ export default function ReportForm({
   const router = useRouter();
 
   const [text, setText] = useState("");
+  const [pages, setPages] = useState(""); // 今日進めたページ数
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -57,6 +58,7 @@ export default function ReportForm({
     const fd = new FormData();
     fd.append("goalId", goalId);
     fd.append("textContent", text);
+    if (pages.trim() !== "") fd.append("pagesRead", pages.trim());
     if (file) fd.append("photo", file);
     if (method === "TIMER" && timerDone) {
       fd.append("studiedSeconds", String(targetSeconds));
@@ -93,7 +95,7 @@ export default function ReportForm({
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="例: 単語100個 / スクワット50回"
+        placeholder="例: 英単語 p.120-135 / 青チャ 例題10問"
       />
       <label>{method === "PHOTO" ? "証拠写真（5MBまで）" : "写真（任意・5MBまで）"}</label>
       <input
@@ -108,9 +110,23 @@ export default function ReportForm({
     <div>
       <h1>今日の進捗報告</h1>
       <p className="muted">
-        宣言：<strong>{goalTitle}</strong>
+        参考書：<strong>{goalTitle}</strong>
         <br />
-        今日の進捗はみんなのタイムラインに公開されます。
+        今日の進捗はみんなのタイムライン・ランキングに反映されます。
+      </p>
+
+      <label>今日進めたページ数（ランキング対象）</label>
+      <input
+        type="number"
+        min={0}
+        max={9999}
+        inputMode="numeric"
+        value={pages}
+        onChange={(e) => setPages(e.target.value)}
+        placeholder="例: 12"
+      />
+      <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.8rem" }}>
+        入力すると週間ページ数ランキングに加算されます（任意）。
       </p>
 
       {method === "TIMER" && (

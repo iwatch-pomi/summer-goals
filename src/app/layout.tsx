@@ -4,16 +4,16 @@ import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SummerGoals — ガチ目標達成",
+  title: "ススメ — 参考書ランキング",
   description:
-    "夏休み限定。同じ目標を持つ大学生と匿名でペアを組み、毎日の進捗報告でガチで達成する。",
+    "参考書・教科書の進捗ページ数を報告して、全国の受験生・大学生とランキングで競い合う学習サービス。",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
-  appleWebApp: { capable: true, title: "SummerGoals", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "ススメ", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

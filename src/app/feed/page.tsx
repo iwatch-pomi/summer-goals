@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 const profilePath = (name: string) => `/u/${encodeURIComponent(name)}`;
 const initialOf = (name: string) => name.trim().charAt(0) || "S";
 
-// みんなの宣言タイムライン（ログイン不要で閲覧可）。
-// 上部＝新しい宣言、下部＝みんなの進捗。各項目にワンタップ応援。
+// みんなの進捗タイムライン（ログイン不要で閲覧可）。
+// 上部＝新しい参考書、下部＝みんなの進捗。各項目にワンタップ応援。
 export default async function FeedPage() {
   const viewer = await getCurrentUser(); // 未ログインなら null
 
@@ -41,6 +41,7 @@ export default async function FeedPage() {
       id: true,
       reportDate: true,
       textContent: true,
+      pagesRead: true,
       photoUrl: true,
       studiedSeconds: true,
       user: { select: { displayName: true } },
@@ -50,6 +51,7 @@ export default async function FeedPage() {
     id: string;
     reportDate: Date;
     textContent: string;
+    pagesRead: number | null;
     photoUrl: string | null;
     studiedSeconds: number | null;
     user: { displayName: string };
@@ -69,15 +71,15 @@ export default async function FeedPage() {
 
   return (
     <div>
-      <h1 style={{ marginBottom: 4 }}>みんなの宣言</h1>
+      <h1 style={{ marginBottom: 4 }}>みんなの進捗</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        目標を公言し、日々の進捗を見せ合う。気になる人を応援しよう。
+        参考書の進捗を見せ合い、競い合う。気になる人を応援しよう。
       </p>
 
-      {/* ===== 新しい宣言 ===== */}
-      <h3 style={{ marginTop: 20 }}>新しい宣言</h3>
+      {/* ===== 新しい参考書 ===== */}
+      <h3 style={{ marginTop: 20 }}>新しい参考書</h3>
       {goals.length === 0 ? (
-        <p className="muted">まだ宣言がありません。</p>
+        <p className="muted">まだ参考書がありません。</p>
       ) : (
         goals.map((g) => (
           <div className="card" key={g.id}>
@@ -89,7 +91,7 @@ export default async function FeedPage() {
                 {g.user.university && (
                   <span className="muted" style={{ fontSize: "0.82rem" }}> · {g.user.university}</span>
                 )}
-                <p style={{ margin: "6px 0 0", fontWeight: 700 }}>🎯 {g.title}</p>
+                <p style={{ margin: "6px 0 0", fontWeight: 700 }}>📖 {g.title}</p>
                 {g.description && (
                   <p className="muted" style={{ margin: "4px 0 0" }}>{g.description}</p>
                 )}
@@ -119,21 +121,25 @@ export default async function FeedPage() {
                   {r.user.displayName}
                 </Link>
                 <div className="muted" style={{ fontSize: "0.82rem" }}>
-                  🎯 {r.goal.title} ・{" "}
+                  📖 {r.goal.title} ・{" "}
                   {r.reportDate.toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" })}
                 </div>
               </div>
             </div>
-            {r.studiedSeconds != null && (
-              <span className="badge" style={{ marginTop: 10 }}>
-                ⏱ {Math.round(r.studiedSeconds / 60)}分 集中
-              </span>
-            )}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {r.pagesRead != null && (
+                <span className="badge">📖 {r.pagesRead}ページ</span>
+              )}
+              {r.studiedSeconds != null && (
+                <span className="badge">⏱ {Math.round(r.studiedSeconds / 60)}分 集中</span>
+              )}
+            </div>
             {r.textContent ? (
               <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{r.textContent}</p>
             ) : (
               !r.photoUrl &&
-              r.studiedSeconds == null && (
+              r.studiedSeconds == null &&
+              r.pagesRead == null && (
                 <p style={{ margin: "10px 0 0" }}>
                   <strong style={{ color: "var(--green)" }}>✅ 勉強した</strong>
                 </p>
