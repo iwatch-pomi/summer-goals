@@ -1,7 +1,8 @@
 // ===========================================================================
 // summer-goals — Prisma スキーマ
-// 「ガチ」目標達成マッチングアプリ MVP のデータモデル
-// docs/DESIGN.md の「1. データベース設計」に対応
+// 「公開宣言（宣言効果）」型の目標達成サービスのデータモデル。
+// 目標＝公開宣言 / 日々の報告＝公開の進捗 / 応援（エール）＝ワンタップ支援。
+// 決済（デポジット・返金）は撤去済み。
 // ===========================================================================
 
 generator client {
@@ -10,8 +11,6 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  // 実行時はプール接続(6543)、マイグレーションは直接接続(5432)を使う。
-  // Vercel などサーバーレスでの接続枯渇を防ぐ標準構成。
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
@@ -28,8 +27,8 @@ enum GoalGenre {
 }
 
 enum GoalStatus {
-  MATCHING // 相手待ち（マッチングプール）
-  ACTIVE // ペア成立・進行中
+  MATCHING // （旧・未使用。互換のため残置）
+  ACTIVE // 進行中
   COMPLETED // 期間満了
   CANCELLED // 取消・退会
 }
@@ -41,145 +40,94 @@ enum ReportMethod {
   TIMER // アプリ内タイマーで規定時間の勉強が必要
 }
 
-enum ChallengePaymentStatus {
-  PENDING // 未決済
-  PAID // ¥3,500 決済成功
-  FAILED // 決済失敗
-}
-
-enum ChallengeStatus {
-  AWAITING_PAYMENT // 決済待ち
-  ACTIVE // 有料会員・チャレンジ進行中
-  SETTLED // 精算（返金）完了
-  CANCELLED // 取消
-}
-
-enum SettlementStatus {
-  PENDING // 未精算
-  REFUNDED // 部分返金済み
-  NO_REFUND // 返金額0（全サボり）
-  REFUND_FAILED // 返金失敗（次回再実行）
-}
-
 // ---- モデル ---------------------------------------------------------------
 
 /// アプリ利用者。Supabase Auth のユーザーと email で 1:1 に対応する。
 model User {
-  id                     String   @id @default(uuid())
-  email                  String   @unique
-  displayName            String   @unique // 公開ユーザーネーム（登録時に本人が入力・重複不可）
-  university             String? // 大学名（任意・公開）
-  profileComplete        Boolean  @default(false) // ユーザーネーム設定済みか（Google初回は false→onboarding）
-  avatarSeed             String // アバター生成用シード（匿名性担保）
-  stripeCustomerId       String?  @unique // ユーザーごとの Stripe Customer ID
-  defaultPaymentMethodId String? // SetupIntent で保存した支払い方法
-  cardRegistered         Boolean  @default(false)
-  paidMember             Boolean  @default(false) // ¥3,500 決済成功で有料会員（アクティブ）
-  timezone               String   @default("Asia/Tokyo")
-  status                 String   @default("ACTIVE") // ACTIVE / PENDING_DELETION
-  deletionScheduledAt    DateTime? // 退会申請時に now+7日。この時刻を過ぎたら完全削除
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  displayName         String    @unique // 公開ユーザーネーム（共有プロフィールのURLにも使う）
+  university          String? // 大学名（任意・公開）
+  profileComplete     Boolean   @default(false) // ユーザーネーム設定済みか（Google初回は false→onboarding）
+  avatarSeed          String // アバター生成用シード
+  timezone            String    @default("Asia/Tokyo")
+  status              String    @default("ACTIVE") // ACTIVE / PENDING_DELETION
+  deletionScheduledAt DateTime? // 退会申請時に now+7日。この時刻を過ぎたら完全削除
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   goals           Goal[]
   reports         Report[]
-  challenges      Challenge[]
   roomsCreated    Room[]       @relation("RoomCreator")
   roomMemberships RoomMember[]
+  cheers          Cheer[]
 }
 
-/// ユーザーが設定する個人の目標（ソロ）。genre はタグ・部屋分類に流用。
+/// ユーザーが設定する目標＝公開宣言。
 model Goal {
   id            String       @id @default(uuid())
   userId        String
-  genre         GoalGenre? // 任意タグ（部屋分類にも流用可）。目標作成は部屋に連動しない。
+  genre         GoalGenre? // 任意タグ
   title         String
   description   String?
   reportMethod  ReportMethod @default(PHOTO) // 日々の報告方法（写真／ボタン／タイマー）
   studyMinutes  Int? // TIMER方式のときの規定勉強分数
+  isPublic      Boolean      @default(true) // 公開宣言（既定で公開）
   dailyDeadline String       @default("23:59") // 締切時刻(JST)
   periodStart   DateTime     @db.Date
   periodEnd     DateTime     @db.Date
   status        GoalStatus   @default(ACTIVE)
   createdAt     DateTime     @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-/// 毎日の進捗報告（テキスト + 写真）。ソロ。自分の Challenge に紐づく。
-/// 報告有無のフラグ = 当該日に行が存在するか。タイムスタンプ = createdAt(JST)。
-model Report {
-  id          String   @id @default(uuid())
-  userId      String
-  challengeId String // ソロ報告は必ず自分の進行中チャレンジに紐づく
-  reportDate  DateTime @db.Date // 対象日(JST)
-  textContent String // メモ（方式により任意。未入力は空文字）
-  photoUrl    String? // 非公開バケット上のパス（表示時に署名URLを発行）
-  studiedSeconds Int? // TIMER方式で集中した秒数（フィード表示に使用）
-  createdAt   DateTime @default(now())
-
-  user      User      @relation(fields: [userId], references: [id])
-  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-
-  @@unique([challengeId, reportDate]) // 1チャレンジ1日1報告・冪等性の核
-  @@index([challengeId, reportDate])
-  @@index([userId, reportDate]) // 部屋ボードでメンバーの当日報告を引く用
-}
-
-/// デポジット = 決済・返金の管理単位。ユーザー1人の1チャレンジ（例: 8月）= 1レコード。
-/// Stripe の Charge/PaymentIntent と返金計算をここに集約する。
-model Challenge {
-  id     String @id @default(uuid())
-  userId String
-
-  // 期間
-  startDate    DateTime @db.Date // 例 2026-08-01
-  endDate      DateTime @db.Date // 例 2026-08-30（30日間）
-  durationDays Int      @default(30)
-
-  // 金額（JPY=ゼロ桁通貨。値は円そのもの）
-  systemFeeYen    Int @default(500) // 返金不可（参加費）
-  depositYen      Int @default(3000) // 日割返金可（返金の上限）
-  totalChargedYen Int @default(3500) // 前払い総額
-  dailyForfeitYen Int @default(100) // サボり1日あたり失効額
-  graceDays       Int @default(8) // 猶予日数 = 開始30日間に含まれる土日数（参加時に確定）
-
-  // Stripe（返金時に必要な ID を保持）
-  stripePaymentIntentId String?                @unique
-  stripeChargeId        String? // latest_charge。返金で使用
-  paymentStatus         ChallengePaymentStatus @default(PENDING)
-  paidAt                DateTime?
-
-  // 精算（返金計算用カラム）
-  successDays      Int              @default(0) // 報告成功日数
-  refundAmountYen  Int              @default(0) // = min(successDays*100, depositYen)
-  forfeitedYen     Int              @default(0) // = depositYen - refundAmountYen
-  stripeRefundId   String?
-  settlementStatus SettlementStatus @default(PENDING)
-  settledAt        DateTime?
-
-  status    ChallengeStatus @default(AWAITING_PAYMENT)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   reports Report[]
+  cheers  Cheer[]
 
-  @@index([status, settlementStatus]) // 月末バッチ抽出用
   @@index([userId])
+  @@index([isPublic, createdAt]) // 公開タイムライン抽出用
 }
 
-/// Stripe Webhook の冪等処理用。重複イベントを弾く。
-model WebhookEvent {
-  id          String   @id // Stripe の event id
-  type        String
-  processedAt DateTime @default(now())
+/// 毎日の進捗報告（テキスト + 写真）。目標（宣言）に紐づく公開の進捗。
+/// 報告有無のフラグ = 当該日に行が存在するか。
+model Report {
+  id             String   @id @default(uuid())
+  userId         String
+  goalId         String // 報告は目標（宣言）に紐づく
+  reportDate     DateTime @db.Date // 対象日(JST)
+  textContent    String // メモ（方式により任意。未入力は空文字）
+  photoUrl       String? // 非公開バケット上のパス（表示時に署名URLを発行）
+  studiedSeconds Int? // TIMER方式で集中した秒数（表示に使用）
+  createdAt      DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id])
+  goal   Goal    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  cheers Cheer[]
+
+  @@unique([goalId, reportDate]) // 1目標1日1報告・冪等性の核
+  @@index([userId, reportDate])
+  @@index([createdAt]) // 公開タイムライン抽出用
+}
+
+/// 応援（エール）。宣言（Goal）または進捗（Report）へのワンタップ支援。
+/// goalId / reportId はどちらか一方のみを持つ（API で強制）。
+model Cheer {
+  id        String   @id @default(uuid())
+  userId    String // 応援した人
+  goalId    String? // 宣言への応援
+  reportId  String? // 進捗への応援
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal   Goal?   @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  report Report? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, goalId]) // 同一宣言に二重応援不可（NULL は複数可）
+  @@unique([userId, reportId]) // 同一報告に二重応援不可
+  @@index([goalId])
+  @@index([reportId])
 }
 
 /// 一緒に取り組む「部屋」。報告ボード（メンバーの当日報告を見せ合う）用。
-/// 決済・返金には関与しない（個人の Challenge が資金の単位）。
 model Room {
   id          String     @id @default(uuid())
   name        String

@@ -25,15 +25,6 @@ const METHODS = [
   },
 ] as const;
 
-// 期間は30日固定。開始日だけ 8/12〜9/10 の間で選ぶ（enroll と同じ規則・env で上書き可）。
-const DURATION_DAYS = Number(
-  process.env.NEXT_PUBLIC_CHALLENGE_DURATION_DAYS ?? 30
-);
-const MIN_START =
-  process.env.NEXT_PUBLIC_CHALLENGE_MIN_START_DATE ?? "2026-08-12";
-const MAX_START =
-  process.env.NEXT_PUBLIC_CHALLENGE_MAX_START_DATE ?? "2026-09-10";
-
 function todayJstYmd(): string {
   const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
   return jst.toISOString().slice(0, 10);
@@ -48,8 +39,7 @@ function fmtJp(ymd: string): string {
   return `${Number(m)}/${Number(d)}`;
 }
 
-// 目標作成フォーム（個人・ソロ）。作成後は next（既定 /dashboard）へ戻る。
-// マッチングや部屋の作成には一切連動しない。
+// 目標（公開宣言）の作成フォーム。作成後は next（既定 /dashboard）へ戻る。
 export default function GoalForm({ next }: { next?: string }) {
   const router = useRouter();
   const [genre, setGenre] = useState(""); // 既定は「選択しない」
@@ -57,10 +47,12 @@ export default function GoalForm({ next }: { next?: string }) {
   const [description, setDescription] = useState("");
   const [reportMethod, setReportMethod] = useState<"PHOTO" | "BUTTON" | "TIMER">("PHOTO");
   const [studyMinutes, setStudyMinutes] = useState("30"); // TIMER時の規定分
-  // 開始日は 8/12〜9/10（実下限は max(下限, 今日)）。終了日は開始+30日で自動確定。
-  const minStart = MIN_START > todayJstYmd() ? MIN_START : todayJstYmd();
+  // 開始日は今日以降。期間（日数）は既定30日で編集可。終了日は自動確定。
+  const minStart = todayJstYmd();
   const [periodStart, setPeriodStart] = useState(minStart);
-  const periodEnd = addDaysYmd(periodStart, DURATION_DAYS - 1);
+  const [durationDays, setDurationDays] = useState("30");
+  const durNum = Math.max(1, Math.floor(Number(durationDays) || 0));
+  const periodEnd = addDaysYmd(periodStart, durNum - 1);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -92,9 +84,10 @@ export default function GoalForm({ next }: { next?: string }) {
 
   return (
     <div>
-      <h1>目標を設定</h1>
+      <h1>目標を宣言する</h1>
       <p className="muted">
-        あなた自身の目標です。毎日の報告でデポジットが返金されます。部屋への参加は任意です。
+        みんなに公言する目標です。宣言すると<strong>公開プロフィール・タイムライン</strong>に載り、
+        日々の進捗も公開されます。人の視線と応援が、達成を後押しします。
       </p>
 
       <label>目標（タイトル）</label>
@@ -172,16 +165,24 @@ export default function GoalForm({ next }: { next?: string }) {
         </>
       )}
 
-      <label>開始日（{fmtJp(MIN_START)}〜{fmtJp(MAX_START)}）</label>
+      <label>開始日</label>
       <input
         type="date"
         value={periodStart}
         min={minStart}
-        max={MAX_START}
         onChange={(e) => setPeriodStart(e.target.value)}
       />
+      <label>期間（日数）</label>
+      <input
+        type="number"
+        min={1}
+        max={365}
+        value={durationDays}
+        onChange={(e) => setDurationDays(e.target.value)}
+        placeholder="例: 30"
+      />
       <p className="muted" style={{ margin: "8px 0 0" }}>
-        期間は <strong>{DURATION_DAYS}日間</strong>（{fmtJp(periodStart)} 〜 {fmtJp(periodEnd)}）です。
+        期間：<strong>{fmtJp(periodStart)} 〜 {fmtJp(periodEnd)}</strong>（{durNum}日間）
       </p>
 
       {msg && <p style={{ color: "#dc2626" }}>{msg}</p>}
@@ -191,11 +192,10 @@ export default function GoalForm({ next }: { next?: string }) {
           loading ||
           !title ||
           periodStart < minStart ||
-          periodStart > MAX_START ||
           (reportMethod === "TIMER" && !(Number(studyMinutes) >= 1))
         }
       >
-        {loading ? "作成中..." : "目標を作成"}
+        {loading ? "宣言中..." : "宣言する"}
       </button>
     </div>
   );

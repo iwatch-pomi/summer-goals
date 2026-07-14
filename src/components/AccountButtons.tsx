@@ -4,15 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 // 退会申請ボタン（二重確認あり）。
-export function DeactivateButton({ hasActiveChallenge }: { hasActiveChallenge: boolean }) {
+export function DeactivateButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   async function deactivate() {
-    const warn = hasActiveChallenge
-      ? "進行中のチャレンジがあります。退会するとデポジットは返金されません。\n\n本当に退会しますか？（7日以内なら取り消せます）"
-      : "退会しますか？7日後にすべてのデータが完全に削除されます。（7日以内なら取り消せます）";
-    if (!confirm(warn)) return;
+    if (
+      !confirm(
+        "退会しますか？7日後に目標・報告・写真などすべてのデータが完全に削除されます。（7日以内なら取り消せます）"
+      )
+    )
+      return;
 
     setLoading(true);
     const res = await fetch("/api/account/deactivate", { method: "POST" });

@@ -14,17 +14,22 @@ export default async function ReportPage() {
     redirect("/signup?mode=login");
   }
 
-  // 最新の ACTIVE な目標の報告方式に従う（通常は目標1つ）。
+  // 最新の ACTIVE な目標（宣言）の報告方式に従う（通常は目標1つ）。
   const goal = await prisma.goal.findFirst({
     where: { userId: user.id, status: GoalStatus.ACTIVE },
     orderBy: { createdAt: "desc" },
-    select: { id: true, reportMethod: true, studyMinutes: true },
+    select: { id: true, title: true, reportMethod: true, studyMinutes: true },
   });
   if (!goal) {
     redirect("/goals/new?next=/report");
   }
 
   return (
-    <ReportForm method={goal.reportMethod} studyMinutes={goal.studyMinutes ?? 30} />
+    <ReportForm
+      goalId={goal.id}
+      goalTitle={goal.title}
+      method={goal.reportMethod}
+      studyMinutes={goal.studyMinutes ?? 30}
+    />
   );
 }

@@ -92,14 +92,8 @@ export default async function RoomBoardPage({
               <li key={m.id}>{m.user.displayName}</li>
             ))}
           </ul>
-          <p className="muted">メンバーの日々の報告は、参加すると見られます。</p>
-          {user.paidMember ? (
-            <JoinLeaveButton roomId={room.id} joined={false} />
-          ) : (
-            <Link href="/enroll" className="btn">
-              参加（¥3,500）して入室する
-            </Link>
-          )}
+          <p className="muted">メンバーの日々の報告は、入室すると見られます。</p>
+          <JoinLeaveButton roomId={room.id} joined={false} />
         </div>
       </div>
     );
@@ -128,11 +122,9 @@ export default async function RoomBoardPage({
         今日の報告: {todayReports.length} / {room.members.length} 人
       </p>
 
-      {user.paidMember && (
-        <div style={{ margin: "8px 0 16px" }}>
-          <JoinLeaveButton roomId={room.id} joined={joined} />
-        </div>
-      )}
+      <div style={{ margin: "8px 0 16px" }}>
+        <JoinLeaveButton roomId={room.id} joined={joined} />
+      </div>
 
       {room.members.map((m) => {
         const r = reportByUser.get(m.userId);

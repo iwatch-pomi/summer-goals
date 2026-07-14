@@ -8,9 +8,13 @@ type Method = "PHOTO" | "BUTTON" | "TIMER";
 // 毎日の進捗報告フォーム（ソロ）。報告方法（写真／ボタン／タイマー）で入力を出し分ける。
 // 写真はサーバー(/api/reports)経由で非公開バケットへ安全にアップロードされる。
 export default function ReportForm({
+  goalId,
+  goalTitle,
   method,
   studyMinutes,
 }: {
+  goalId: string;
+  goalTitle: string;
   method: Method;
   studyMinutes: number;
 }) {
@@ -51,6 +55,7 @@ export default function ReportForm({
 
     // multipart/form-data で送信（Content-Type はブラウザが自動設定）。
     const fd = new FormData();
+    fd.append("goalId", goalId);
     fd.append("textContent", text);
     if (file) fd.append("photo", file);
     if (method === "TIMER" && timerDone) {
@@ -102,7 +107,11 @@ export default function ReportForm({
   return (
     <div>
       <h1>今日の進捗報告</h1>
-      <p className="muted">23:59（JST）までに報告すればデポジットは失効しません。</p>
+      <p className="muted">
+        宣言：<strong>{goalTitle}</strong>
+        <br />
+        今日の進捗はみんなのタイムラインに公開されます。
+      </p>
 
       {method === "TIMER" && (
         <div className="card" style={{ textAlign: "center" }}>

@@ -42,6 +42,11 @@ export default function SiteHeader() {
         <nav style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* ログイン/新規登録画面では右側の導線を出さない */}
           {!onAuthPage && (
+            <Link href="/feed" className="muted" style={{ fontWeight: 700 }}>
+              みんなの宣言
+            </Link>
+          )}
+          {!onAuthPage && (
             <Link href="/rooms" className="muted" style={{ fontWeight: 700 }}>
               部屋
             </Link>

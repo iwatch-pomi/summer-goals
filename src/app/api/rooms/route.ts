@@ -33,17 +33,11 @@ export async function GET() {
   });
 }
 
-// POST /api/rooms — 部屋を作成（作成者は自動入室）。有料会員のみ。
+// POST /api/rooms — 部屋を作成（作成者は自動入室）。ログインユーザーなら誰でも。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!user.paidMember) {
-    return NextResponse.json(
-      { error: "payment-required", message: "参加（¥3,500）後に部屋を作成できます" },
-      { status: 403 }
-    );
   }
 
   const body = await req.json().catch(() => null);

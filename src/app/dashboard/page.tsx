@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChallengeStatus, GoalStatus } from "@prisma/client";
+import { GoalStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createSignedReportUrl } from "@/lib/supabase";
 import { jstDateString, toDateOnly } from "@/lib/dates";
-import LogoutButton from "@/components/LogoutButton";
+import { computeStreak, weekStatus, reportedDateSet, WEEKDAY_LABELS } from "@/lib/streak";
 
 export const dynamic = "force-dynamic"; // ログインユーザーごとに描画
 
-// マイページ（Strava風3カラム）。左=プロフィール+ストリーク / 中央=記録フィード / 右=部屋。
+// マイページ（Strava風3カラム）。左=プロフィール+ストリーク / 中央=進捗フィード / 右=宣言・部屋。
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
@@ -29,6 +29,7 @@ export default async function DashboardPage() {
 
   const todayYmd = jstDateString();
   const today = toDateOnly(todayYmd);
+  const profileUrl = `/u/${encodeURIComponent(user.displayName)}`;
 
   const pendingBanner = user.status === "PENDING_DELETION" &&
     user.deletionScheduledAt && (
@@ -41,59 +42,11 @@ export default async function DashboardPage() {
       </div>
     );
 
-  // ---- 未払い: 参加導線中心のシンプル表示 ----
-  if (!user.paidMember) {
-    return (
-      <div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <h1 style={{ margin: 0 }}>こんにちは、{user.displayName} さん</h1>
-          <LogoutButton />
-        </div>
-        {pendingBanner}
-        <div className="card">
-          <span className="badge">未参加</span>
-          <h3 style={{ margin: "6px 0" }}>チャレンジに参加する</h3>
-          <p className="muted">
-            参加費 ¥500（返金不可）＋ デポジット ¥3,000（報告した日数に応じて返金）。
-            いつでも参加できます。
-          </p>
-          <Link href="/enroll" className="btn">
-            ¥3,500 を支払って参加する
-          </Link>
-        </div>
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>部屋</strong>
-            <Link href="/rooms" className="muted">部屋をさがす →</Link>
-          </div>
-          <p className="muted" style={{ margin: "8px 0 0" }}>
-            参加前でも、みんなの部屋の一覧は見られます。
-          </p>
-        </div>
-        <p className="sub" style={{ marginTop: 20 }}>
-          <Link href="/account" className="muted">アカウント設定・退会</Link>
-        </p>
-      </div>
-    );
-  }
-
-  // ---- 有料: データ取得 ----
-  const challenge = await prisma.challenge.findFirst({
-    where: { userId: user.id, status: ChallengeStatus.ACTIVE },
-    orderBy: { createdAt: "desc" },
-  });
-
   // 自分の報告（新しい順・全件）。フィード＋ストリーク算出に使う。
   const reports = (await prisma.report.findMany({
     where: { userId: user.id },
     orderBy: { reportDate: "desc" },
+    select: { id: true, reportDate: true, textContent: true, photoUrl: true, studiedSeconds: true },
   })) as Array<{
     id: string;
     reportDate: Date;
@@ -102,52 +55,32 @@ export default async function DashboardPage() {
     studiedSeconds: number | null;
   }>;
 
-  // 写真の署名URLをまとめて発行。
   const signedUrls = await Promise.all(
     reports.map((r) => (r.photoUrl ? createSignedReportUrl(r.photoUrl) : Promise.resolve(null)))
   );
 
-  // 報告日の集合（YYYY-MM-DD, JST基準の日付文字列）。
-  const reportedSet = new Set(
-    reports.map((r) => r.reportDate.toISOString().slice(0, 10))
-  );
+  const reportedSet = reportedDateSet(reports.map((r) => r.reportDate));
   const reportedToday = reportedSet.has(todayYmd);
-
-  // 連続報告日数（今日 or 昨日から遡って連続）。
   const currentStreak = computeStreak(reportedSet, today, reportedToday);
-
-  // 今週（月〜日）の報告状況。
   const week = weekStatus(reportedSet, today);
+  const successDays = reportedSet.size;
 
-  // 返金見込み・残り日数・成功日数。
-  let successDays = 0;
-  let refundEstimateYen = 0;
-  let daysRemaining = 0;
-  let inPeriod = false;
-  const graceDays = challenge?.graceDays ?? 0; // 表示用（このチャレンジの土日数）
-  if (challenge) {
-    const distinct = new Set(
-      reports
-        .filter((r) => r.reportDate >= challenge.startDate && r.reportDate <= challenge.endDate)
-        .map((r) => r.reportDate.toISOString().slice(0, 10))
-    );
-    successDays = distinct.size;
-    refundEstimateYen = Math.min(
-      (successDays + challenge.graceDays) * challenge.dailyForfeitYen,
-      challenge.depositYen
-    );
-    const msPerDay = 1000 * 60 * 60 * 24;
-    daysRemaining = Math.max(
-      0,
-      Math.ceil((challenge.endDate.getTime() - today.getTime()) / msPerDay)
-    );
-    inPeriod = today >= challenge.startDate && today <= challenge.endDate;
-  }
-
+  // 進行中の宣言（最新の ACTIVE 目標）。今日が期間内かで報告可否を判定。
   const goals = await prisma.goal.findMany({
     where: { userId: user.id, status: GoalStatus.ACTIVE },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true },
+    select: { id: true, title: true, periodStart: true, periodEnd: true },
+  });
+  const activeGoal = goals[0];
+  const inPeriod = activeGoal
+    ? today >= activeGoal.periodStart && today <= activeGoal.periodEnd
+    : false;
+
+  // もらった応援（自分の宣言・進捗への Cheer の合計）。
+  const cheersReceived = await prisma.cheer.count({
+    where: {
+      OR: [{ goal: { userId: user.id } }, { report: { userId: user.id } }],
+    },
   });
 
   const myRooms = await prisma.roomMember.findMany({
@@ -157,7 +90,6 @@ export default async function DashboardPage() {
   });
 
   const initial = user.displayName.trim().charAt(0) || "S";
-  const WD = ["月", "火", "水", "木", "金", "土", "日"];
 
   return (
     <div className="dash">
@@ -181,10 +113,18 @@ export default async function DashboardPage() {
                   <span className="stat-label">連続日数</span>
                 </div>
                 <div>
-                  <span className="stat-num">¥{refundEstimateYen.toLocaleString()}</span>
-                  <span className="stat-label">返金見込み</span>
+                  <span className="stat-num">{cheersReceived}</span>
+                  <span className="stat-label">もらった応援</span>
                 </div>
               </div>
+
+              <Link
+                href={profileUrl}
+                className="btn btn-secondary"
+                style={{ marginTop: 12 }}
+              >
+                公開プロフィールを見る
+              </Link>
             </div>
 
             <div className="card">
@@ -198,13 +138,10 @@ export default async function DashboardPage() {
                     <span className={done ? "streak-dot on" : "streak-dot"}>
                       {done ? "✓" : ""}
                     </span>
-                    <span className="streak-wd">{WD[i]}</span>
+                    <span className="streak-wd">{WEEKDAY_LABELS[i]}</span>
                   </div>
                 ))}
               </div>
-              <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.8rem" }}>
-                残り {daysRemaining} 日 ・ {graceDays}日までお休みOK
-              </p>
             </div>
 
             <p className="sub" style={{ marginTop: 4 }}>
@@ -212,21 +149,32 @@ export default async function DashboardPage() {
             </p>
           </aside>
 
-          {/* ===== 中央：記録フィード ===== */}
+          {/* ===== 中央：進捗フィード ===== */}
           <main className="dash-center">
-            {!reportedToday && inPeriod && (
+            {activeGoal && !reportedToday && inPeriod && (
               <Link href="/report" className="btn" style={{ marginTop: 0 }}>
                 今日の進捗を報告する
               </Link>
             )}
-            {reportedToday && (
+            {activeGoal && reportedToday && (
               <div className="card" style={{ marginTop: 0 }}>
                 <strong>✅ 本日は報告済みです</strong>
               </div>
             )}
-            {!inPeriod && (
+            {!activeGoal && (
               <div className="card" style={{ marginTop: 0 }}>
-                <p className="muted" style={{ margin: 0 }}>チャレンジ期間に入ると報告できます。</p>
+                <strong>まず目標を宣言しましょう</strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  みんなに公言すると、視線と応援で続けやすくなります。
+                </p>
+                <Link href="/goals/new" className="btn" style={{ marginTop: 12 }}>
+                  目標を宣言する
+                </Link>
+              </div>
+            )}
+            {activeGoal && !inPeriod && (
+              <div className="card" style={{ marginTop: 0 }}>
+                <p className="muted" style={{ margin: 0 }}>宣言した期間に入ると報告できます。</p>
               </div>
             )}
 
@@ -284,8 +232,39 @@ export default async function DashboardPage() {
             )}
           </main>
 
-          {/* ===== 右：勉強部屋 ＋ 目標 ===== */}
+          {/* ===== 右：宣言 ＋ 部屋 ===== */}
           <aside className="dash-right">
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong>あなたの宣言</strong>
+                <Link href="/goals/new" className="muted">追加 →</Link>
+              </div>
+              {goals.length === 0 ? (
+                <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
+                  まだ宣言がありません。
+                </p>
+              ) : (
+                <ul className="muted" style={{ margin: "8px 0 0", paddingLeft: "1.1em" }}>
+                  {goals.map((g) => (
+                    <li key={g.id}>{g.title}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="muted" style={{ margin: "10px 0 0", fontSize: "0.82rem" }}>
+                共有リンク：<Link href={profileUrl}>{profileUrl}</Link>
+              </p>
+            </div>
+
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong>みんなの宣言</strong>
+                <Link href="/feed" className="muted">見る →</Link>
+              </div>
+              <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
+                他の人の宣言と進捗を見て、応援しよう。
+              </p>
+            </div>
+
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <strong>勉強部屋</strong>
@@ -293,7 +272,7 @@ export default async function DashboardPage() {
               </div>
               {myRooms.length === 0 ? (
                 <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
-                  まだ部屋に参加していません。仲間と報告を見せ合うと続けやすくなります。
+                  まだ部屋に参加していません。
                 </p>
               ) : (
                 <ul className="muted" style={{ margin: "8px 0 0", paddingLeft: "1.1em" }}>
@@ -305,60 +284,9 @@ export default async function DashboardPage() {
                 </ul>
               )}
             </div>
-
-            <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong>目標</strong>
-                <Link href="/goals/new" className="muted">追加 →</Link>
-              </div>
-              {goals.length === 0 ? (
-                <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.88rem" }}>
-                  まだ目標がありません。
-                </p>
-              ) : (
-                <ul className="muted" style={{ margin: "8px 0 0", paddingLeft: "1.1em" }}>
-                  {goals.map((g) => (
-                    <li key={g.id}>{g.title}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </aside>
         </div>
       </div>
     </div>
   );
-}
-
-// 今日(または未報告なら昨日)から遡って連続で報告している日数。
-function computeStreak(reported: Set<string>, today: Date, reportedToday: boolean): number {
-  let streak = 0;
-  const cursor = new Date(today);
-  if (!reportedToday) cursor.setUTCDate(cursor.getUTCDate() - 1); // 今日未報告なら昨日から数える
-  for (let i = 0; i < 400; i++) {
-    const ymd = cursor.toISOString().slice(0, 10);
-    if (reported.has(ymd)) {
-      streak += 1;
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
-
-// 今週(月〜日)の各曜日に報告があったか。
-function weekStatus(reported: Set<string>, today: Date): boolean[] {
-  // today の曜日(0=日..6=土)から、今週の月曜を求める。
-  const dow = today.getUTCDay(); // 0=Sun
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const monday = new Date(today);
-  monday.setUTCDate(monday.getUTCDate() + mondayOffset);
-  const out: boolean[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setUTCDate(d.getUTCDate() + i);
-    out.push(reported.has(d.toISOString().slice(0, 10)));
-  }
-  return out;
 }

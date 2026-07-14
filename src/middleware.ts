@@ -30,6 +30,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // 静的アセットと Stripe Webhook を除外（Webhook は Cookie 不要）。
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.json|api/stripe/webhook|api/cron).*)"],
+  // 静的アセットと Cron（Cookie 不要）を除外。
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.json|api/cron).*)"],
 };

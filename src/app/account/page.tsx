@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { ChallengeStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { GRACE_DAYS } from "@/lib/account";
 import { DeactivateButton, ReactivateButton } from "@/components/AccountButtons";
 
@@ -23,11 +21,6 @@ export default async function AccountPage() {
 
   const pending = user.status === "PENDING_DELETION" && user.deletionScheduledAt;
 
-  const activeChallenge = await prisma.challenge.findFirst({
-    where: { userId: user.id, status: ChallengeStatus.ACTIVE },
-    select: { id: true },
-  });
-
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -42,22 +35,6 @@ export default async function AccountPage() {
         <p style={{ margin: "4px 0 12px", fontWeight: 700 }}>{user.displayName}</p>
         <p className="muted" style={{ margin: 0 }}>大学名</p>
         <p style={{ margin: "4px 0" }}>{user.university ?? "（未設定）"}</p>
-      </div>
-
-      <div className="card">
-        <strong>参加状況</strong>
-        {user.paidMember ? (
-          <p style={{ margin: "8px 0 0" }}>✅ 参加済み（お支払い完了）</p>
-        ) : (
-          <>
-            <p className="muted" style={{ margin: "8px 0" }}>
-              未参加です。お支払い（¥3,500）をするとチャレンジを始められます。
-            </p>
-            <Link href="/enroll" className="btn">
-              ¥3,500 を支払って参加する
-            </Link>
-          </>
-        )}
       </div>
 
       {pending ? (
@@ -79,12 +56,7 @@ export default async function AccountPage() {
             退会すると、{GRACE_DAYS}日間の猶予のあと、目標・報告・写真・部屋を含む
             すべてのデータが完全に削除されます（猶予中は取り消し可能）。
           </p>
-          {activeChallenge && (
-            <p style={{ color: "#dc2626" }}>
-              ※進行中のチャレンジがあります。退会するとデポジットは返金されません。
-            </p>
-          )}
-          <DeactivateButton hasActiveChallenge={!!activeChallenge} />
+          <DeactivateButton />
         </div>
       )}
     </div>

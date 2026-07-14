@@ -51,21 +51,12 @@ export default async function RoomsPage() {
         一緒にやる仲間と「部屋」で報告を見せ合えます。報告自体はソロでもOK（参加は任意）。
       </p>
 
-      {user?.paidMember ? (
+      {user ? (
         <CreateRoomForm />
       ) : (
         <p className="muted">
-          {user ? (
-            <>
-              部屋の作成・入室は参加（¥3,500）後にできます。{" "}
-              <Link href="/enroll">参加する</Link>
-            </>
-          ) : (
-            <>
-              部屋の作成・入室には{" "}
-              <Link href="/signup?mode=login">ログイン</Link> が必要です。
-            </>
-          )}
+          部屋の作成・入室には{" "}
+          <Link href="/signup?mode=login">ログイン</Link> が必要です。
         </p>
       )}
 
@@ -106,15 +97,15 @@ export default async function RoomsPage() {
                 </p>
               </div>
 
-              {user?.paidMember ? (
+              {user ? (
                 <JoinLeaveButton roomId={r.id} joined={joined} />
               ) : (
                 <Link
-                  href={user ? "/enroll" : "/signup?mode=login"}
+                  href="/signup?mode=login"
                   className="btn-secondary"
                   style={{ width: "auto", margin: 0, padding: "8px 16px", fontSize: "0.85rem" }}
                 >
-                  {user ? "参加して入室" : "ログインして参加"}
+                  ログインして入室
                 </Link>
               )}
             </div>

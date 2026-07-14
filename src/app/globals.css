@@ -101,6 +101,43 @@ body {
   font-size: 0.78rem;
 }
 
+/* ---- 応援（エール）ボタン ---- */
+.cheer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--slate);
+  font-size: 0.88rem;
+  font-weight: 700;
+  box-shadow: none;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.12s, border-color 0.12s;
+}
+.cheer-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+.cheer-btn[data-cheered="1"] {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: var(--teal);
+  color: #0f766e;
+}
+.cheer-count {
+  min-width: 1.2em;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cheer-btn[data-cheered="1"] .cheer-count {
+  color: #0f766e;
+}
+
 /* ---- ダッシュボード（Strava風3カラム）---- */
 /* 600px の container を突き抜けて全幅にし、中で 1120px 中央寄せ */
 .dash {

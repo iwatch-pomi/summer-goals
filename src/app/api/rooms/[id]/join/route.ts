@@ -14,12 +14,6 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.paidMember) {
-    return NextResponse.json(
-      { error: "payment-required", message: "参加（¥3,500）後に入室できます" },
-      { status: 403 }
-    );
-  }
 
   const room = await prisma.room.findUnique({
     where: { id: params.id },

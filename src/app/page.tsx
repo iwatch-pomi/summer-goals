@@ -1,62 +1,59 @@
 import Link from "next/link";
+import { GoalStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-// ランディング（予告ページ）。
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+const profilePath = (name: string) => `/u/${encodeURIComponent(name)}`;
+
+// ランディング。目標を公言して、みんなの視線と応援で達成する（無料）。
+export default async function HomePage() {
+  // 最新の公開宣言を数件プレビュー（ログイン不要で中身が見える Amazon 型）。
+  const recentGoals = (await prisma.goal.findMany({
+    where: { isPublic: true, status: GoalStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: { id: true, title: true, user: { select: { displayName: true } } },
+  }).catch(() => [])) as Array<{ id: string; title: string; user: { displayName: string } }>;
+
   return (
     <div>
       <section className="hero">
-        <span className="badge">大学生限定・8月12日 一斉スタート</span>
+        <span className="badge">完全無料</span>
 
         <h2 className="headline">
-          この夏、
+          目標を<span className="accent">公言</span>して、
           <br />
-          “ちゃんとやった”
-          <br />
-          <span className="accent">側</span>になる。
+          最後までやり切る。
         </h2>
 
         <p className="lead">
-          3,000円を先に預けて、毎日証拠写真で報告。30日やり切れば
-          <strong>預けた3,000円が返金</strong>。かかるのはシステム料500円だけ、
-          実質ワンコインで最高に集中できる夏を。
+          一人だと続かない目標も、<strong>みんなに宣言</strong>すれば変わる。
+          毎日の進捗を公開し、応援をもらいながら達成する——お金はかかりません。
         </p>
-
-        <div className="pill" style={{ marginTop: 18 }}>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "var(--green)",
-              flexShrink: 0,
-            }}
-          />
-          先行予約 受付中　<span className="muted">／ 8月12日 一斉スタート 🔥</span>
-        </div>
 
         <Link href="/signup?mode=signup" className="btn btn-lg" style={{ marginTop: 18 }}>
-          この夏、自分に賭けてみる →
+          無料で宣言をはじめる →
         </Link>
         <p className="sub">
-          先行予約（無料）・決済はスタート確定後　·　すでに登録済みの方は{" "}
-          <Link href="/signup?mode=login">ログイン</Link>
+          すでに登録済みの方は <Link href="/signup?mode=login">ログイン</Link>
         </p>
         <p className="sub" style={{ marginTop: 4 }}>
-          <Link href="/rooms">みんなの部屋をのぞいてみる →</Link>
+          <Link href="/feed">みんなの宣言をのぞいてみる →</Link>
         </p>
 
         <div className="stats">
           <div className="stat">
-            <span className="stat-num">30日</span>
-            <span className="stat-label">完走</span>
+            <span className="stat-num">¥0</span>
+            <span className="stat-label">完全無料</span>
           </div>
           <div className="stat">
-            <span className="stat-num">チーム</span>
-            <span className="stat-label">匿名・ソロ可</span>
+            <span className="stat-num">公開</span>
+            <span className="stat-label">宣言効果</span>
           </div>
           <div className="stat">
-            <span className="stat-num">¥500</span>
-            <span className="stat-label">参加費のみ</span>
+            <span className="stat-num">応援</span>
+            <span className="stat-label">みんなで</span>
           </div>
         </div>
       </section>
@@ -65,8 +62,8 @@ export default function HomePage() {
         <span className="eyebrow">The Pain</span>
         <h3>「今年こそ」が、毎年溶けていく。</h3>
         <p className="muted">
-          やる気はある。でも一人だと続かない。気づけば夏は終わって、
-          また「来年こそ」と先延ばし。意志の力だけに頼るのは、もうやめよう。
+          やる気はある。でも一人だと続かない。意志の力だけに頼るのは、もうやめよう。
+          <strong>人に宣言すると、人は動く。</strong>
         </p>
       </section>
 
@@ -75,20 +72,38 @@ export default function HomePage() {
         <h3>仕組み</h3>
         <div className="card">
           <ol className="muted">
-            <li>¥3,500を前払い（参加費¥500＋デポジット¥3,000）</li>
-            <li>自分の目標を設定（部屋への参加は任意）</li>
-            <li>毎日23:59までにテキスト＋写真で報告</li>
-            <li>月末に「報告した日数 × ¥100」をデポジットから返金</li>
+            <li>目標を<strong>宣言</strong>する（公開プロフィールに載る）</li>
+            <li>毎日、進捗を報告（写真・ボタン・タイマーから選べる）</li>
+            <li>みんなが見て<strong>応援</strong>してくれる → 続けられる</li>
+            <li>共有リンクを SNS に貼れば、宣言効果はさらに強力に</li>
           </ol>
           <p className="muted" style={{ margin: 0 }}>
-            毎日続ければ <strong>¥3,000まるごと返金</strong>。サボった日数 × ¥100 だけが失効します。
+            費用は一切かかりません。強制力は「お金」ではなく「みんなの視線と応援」です。
           </p>
         </div>
       </section>
 
+      {recentGoals.length > 0 && (
+        <section style={{ marginTop: 32 }}>
+          <span className="eyebrow">Now declaring</span>
+          <h3>いま宣言している人たち</h3>
+          {recentGoals.map((g) => (
+            <div className="card" key={g.id} style={{ margin: "10px 0" }}>
+              <Link href={profilePath(g.user.displayName)} style={{ fontWeight: 700 }}>
+                {g.user.displayName}
+              </Link>
+              <p style={{ margin: "4px 0 0" }}>🎯 {g.title}</p>
+            </div>
+          ))}
+          <p className="sub">
+            <Link href="/feed">もっと見る →</Link>
+          </p>
+        </section>
+      )}
+
       <section style={{ marginTop: 32 }} className="center">
         <Link href="/signup?mode=signup" className="btn btn-lg">
-          この夏、自分に賭けてみる →
+          無料で宣言をはじめる →
         </Link>
         <p className="sub">
           すでに登録済みの方は <Link href="/signup?mode=login">ログイン</Link>

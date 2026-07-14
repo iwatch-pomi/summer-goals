@@ -7,18 +7,11 @@ import { toDateOnly } from "@/lib/dates";
 const MAX_STUDY_MINUTES = 600; // タイマー規定時間の上限（10時間）
 
 // POST /api/goals
-// 個人の目標（ソロ）を作成する。マッチングや部屋作成には連動しない。
-// ¥3,500 未決済（未参加）ユーザーは作成不可（強制力の前提）。
+// 目標（公開宣言）を作成する。ログインユーザーなら誰でも無料で作成可能。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!user.paidMember) {
-    return NextResponse.json(
-      { error: "payment-required", message: "先に参加費（¥3,500）のお支払いが必要です" },
-      { status: 403 }
-    );
   }
 
   const body = await req.json().catch(() => null);

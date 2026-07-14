@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChallengeStatus, GoalStatus, ReportMethod, Prisma } from "@prisma/client";
+import { GoalStatus, ReportMethod, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { createServiceClient, STORAGE_BUCKET } from "@/lib/supabase";
@@ -22,8 +22,8 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/gif": "gif",
 };
 
-// POST /api/reports  （multipart/form-data: textContent, photo?）
-// ソロの進捗報告。自分の進行中チャレンジ（Challenge）に紐づけて保存する。1日1報告。
+// POST /api/reports  （multipart/form-data: goalId?, textContent, photo?, studiedSeconds?）
+// 目標（宣言）に紐づく日々の進捗報告。1目標1日1報告。
 // 写真は service role でサーバー側から非公開バケットへアップロードし、保存するのはパス。
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -35,22 +35,37 @@ export async function POST(req: NextRequest) {
   if (!form) {
     return NextResponse.json({ error: "invalid-form" }, { status: 400 });
   }
+  const goalIdInput = (form.get("goalId") as string | null)?.trim() || undefined;
   const textContent = (form.get("textContent") as string | null)?.trim() ?? "";
   const photo = form.get("photo");
   const hasPhoto = photo instanceof File && photo.size > 0;
   const studiedSecondsRaw = Number(form.get("studiedSeconds"));
 
-  // 目標必須ゲートのバックストップ：進行中の目標が無ければ報告不可。
-  // 報告方式は「最新の ACTIVE 目標」に従う（報告ページと同一ロジック）。
-  const goal = await prisma.goal.findFirst({
-    where: { userId: user.id, status: GoalStatus.ACTIVE },
-    orderBy: { createdAt: "desc" },
-    select: { reportMethod: true, studyMinutes: true },
-  });
+  const reportDate = toDateOnly(jstDateString()); // 今日(JST)
+
+  // 対象の目標（宣言）を解決。指定があれば本人所有＆ACTIVE、無ければ最新の ACTIVE 目標。
+  const goal = goalIdInput
+    ? await prisma.goal.findFirst({
+        where: { id: goalIdInput, userId: user.id, status: GoalStatus.ACTIVE },
+        select: { id: true, reportMethod: true, studyMinutes: true, periodStart: true, periodEnd: true },
+      })
+    : await prisma.goal.findFirst({
+        where: { userId: user.id, status: GoalStatus.ACTIVE },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, reportMethod: true, studyMinutes: true, periodStart: true, periodEnd: true },
+      });
   if (!goal) {
     return NextResponse.json(
-      { error: "goal-required", message: "先に目標を作成してください" },
+      { error: "goal-required", message: "先に目標を宣言してください" },
       { status: 400 }
+    );
+  }
+
+  // 期間チェック（宣言した期間内のみ報告できる）。
+  if (reportDate < goal.periodStart || reportDate > goal.periodEnd) {
+    return NextResponse.json(
+      { error: "out-of-period", message: "宣言した期間外です" },
+      { status: 403 }
     );
   }
 
@@ -73,28 +88,6 @@ export async function POST(req: NextRequest) {
     studiedSeconds = Math.round(studiedSecondsRaw);
   }
 
-  const reportDate = toDateOnly(jstDateString()); // 今日(JST)
-
-  // 対象日が期間内の ACTIVE な Challenge を引き当てる（無ければ報告不可）。
-  const challenge = await prisma.challenge.findFirst({
-    where: {
-      userId: user.id,
-      status: ChallengeStatus.ACTIVE,
-      startDate: { lte: reportDate },
-      endDate: { gte: reportDate },
-    },
-    select: { id: true },
-  });
-  if (!challenge) {
-    return NextResponse.json(
-      {
-        error: "no-active-challenge",
-        message: "進行中のチャレンジがありません（参加期間外、または未参加です）",
-      },
-      { status: 403 }
-    );
-  }
-
   // 写真があれば service role で非公開バケットへアップロード。保存するのはパス。
   let photoPath: string | null = null;
   if (photo instanceof File && photo.size > 0) {
@@ -114,7 +107,7 @@ export async function POST(req: NextRequest) {
     // 拡張子はファイル名（クライアント任意）由来なので英数字のみに正規化する。
     // これをしないと "a.png/../../x" のようなパストラバーサルを許してしまう。
     const ext = EXT_BY_TYPE[photo.type] ?? "jpg";
-    const path = `${challenge.id}/${user.id}/${jstDateString()}-${crypto.randomUUID()}.${ext}`;
+    const path = `${goal.id}/${user.id}/${jstDateString()}-${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await photo.arrayBuffer());
 
     const service = createServiceClient();
@@ -134,7 +127,7 @@ export async function POST(req: NextRequest) {
     const report = await prisma.report.create({
       data: {
         userId: user.id,
-        challengeId: challenge.id,
+        goalId: goal.id,
         reportDate,
         textContent,
         photoUrl: photoPath,
