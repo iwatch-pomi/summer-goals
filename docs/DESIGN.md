@@ -1,12 +1,14 @@
-# Summer Goals — MVP 設計図
+# ススメ（参考書ランキング）— 設計図
 
-「ガチ」目標達成マッチングアプリの要件定義 & 設計図。夏休み限定（8月〜9月）で大学生向けに最短ローンチする MVP を対象とする。
+参考書・教科書の進捗（ページ数）を報告し、**週間ページ数ランキング**と**連続報告日数（ストリーク）**でみんなと競い合う学習サービス。対象は受験期の高校生、TOEIC・資格・専門科目に取り組む大学生。**完全無料**（決済なし）。
 
 ## コンセプト
 
-本気で目標（英語学習・筋トレ等）を達成したい見知らぬ大学生同士を **匿名でペアリング** し、毎日の進捗報告を義務化する。
-
-**マネタイズ = デポジット返金モデル**: 8月開始時にユーザーが **¥3,500 を前払い**（システム参加費 ¥500【返金不可】＋ デポジット ¥3,000【日割返金可】）。30日間、毎日の進捗報告を求め、1日サボるごとにデポジットから **¥100 が失効**。8月末に **¥100 × 報告成功日数**（上限 ¥3,000）を Stripe の Partial Refund で返金する。失効分＋参加費が運営の利益。
+1. 取り組む参考書・教科書を**登録**する（科目タグ・総ページ数は任意）。
+2. 毎日、進めた**ページ数**を報告する（写真・ボタン・タイマーの3方式から選べる）。
+3. **週間ページ数ランキング**・**連続報告日数ランキング**でみんなと競い合う。
+4. 気になる人の宣言・進捗に**応援（エール）**を送れる。
+5. 公開プロフィール（`/u/[name]`）を SNS に貼って外部からの視線も得られる。
 
 ## 技術スタック
 
@@ -14,17 +16,12 @@
 |---|---|---|
 | フレームワーク | Next.js 14 (App Router) + TypeScript | フロント/バックを1コードベースで。PWA 対応が容易 |
 | DB / ORM | PostgreSQL + Prisma | 型安全・マイグレーション容易 |
-| 認証 | Supabase Auth | 自前実装を避け1ヶ月ローンチを優先 |
-| ストレージ | Supabase Storage | 進捗写真の保存 |
-| 決済 | Stripe（PaymentIntent 即時 Capture + Partial Refund） | 前払い→月末に部分返金が標準機能 |
-| バッチ | Vercel Cron | サーバーレスで定期実行 |
+| 認証 | Supabase Auth | 自前実装を避け短期ローンチを優先 |
+| ストレージ | Supabase Storage | 進捗写真の保存（非公開バケット＋署名URL） |
+| バッチ | Vercel Cron | 退会アカウントの完全削除を日次実行 |
 | ホスティング | Vercel | Next.js と親和性が高い |
 
-タイムゾーンは **JST 固定**。締切は毎日 23:59（JST）。
-
-> **重要な決済設計**:
-> - **JPY はゼロ桁通貨** → Stripe の `amount` は円そのまま（`3500` = ¥3,500）。
-> - **必ず即時 Capture** → オーソリ保留は約7日で失効し30日保持できない。前払いで即キャプチャし、月末に `refunds.create` で部分返金する。
+タイムゾーンは **JST 固定**（`src/lib/dates.ts` がサーバーの実行TZに依存せずJSTの暦日を扱う）。
 
 ---
 
@@ -34,181 +31,139 @@
 
 ### enum
 
-- `GoalGenre`: `ENGLISH` / `MUSCLE_TRAINING` / `STUDY` / `READING` / `DIET` / `OTHER`
-- `GoalStatus`: `MATCHING`（相手待ち）/ `ACTIVE`（進行中）/ `COMPLETED` / `CANCELLED`
-- `MatchStatus`: `ACTIVE` / `ENDED`
-- `ChallengePaymentStatus`: `PENDING` / `PAID` / `FAILED`
-- `ChallengeStatus`: `AWAITING_PAYMENT` / `ACTIVE` / `SETTLED` / `CANCELLED`
-- `SettlementStatus`: `PENDING` / `REFUNDED` / `NO_REFUND` / `REFUND_FAILED`
+- `GoalGenre`（科目タグ）: `ENGLISH` / `MATH` / `JAPANESE` / `SCIENCE` / `SOCIAL` / `TOEIC` / `QUALIFICATION` / `MAJOR` / `OTHER`
+- `GoalStatus`: `ACTIVE`（進行中）/ `COMPLETED`（期間満了）/ `CANCELLED`（取消・退会）/ `MATCHING`（旧・未使用。互換のため残置）
+- `ReportMethod`（日々の報告方法）: `PHOTO`（写真提出）/ `BUTTON`（ワンタップ）/ `TIMER`（アプリ内タイマーで規定時間）
 
 ### User（利用者）
 
 | カラム | 型 | 説明 |
 |---|---|---|
 | id | uuid (PK) | |
-| email | string (unique) | Supabase Auth と紐付け |
-| displayName | string | 匿名ニックネーム（本名禁止）|
-| avatarSeed | string | アバター生成用シード |
-| stripeCustomerId | string? (unique) | Stripe 顧客ID |
-| defaultPaymentMethodId | string? | SetupIntent で保存した支払い方法 |
-| cardRegistered | boolean | カード登録完了フラグ（既定 false）|
-| paidMember | boolean | ¥3,500 決済成功で有料会員（既定 false）|
+| email | string (unique) | Supabase Auth と email で1:1対応 |
+| displayName | string (unique) | 公開ユーザーネーム（共有プロフィールのURLにも使う）|
+| university | string? | 大学名（任意・公開）|
+| profileComplete | boolean | ユーザーネーム設定済みか（Google初回は false→onboarding）|
+| avatarSeed | string | アバター生成用シード（Supabase Authのuser idも保持し、退会時の削除に使用）|
 | timezone | string | 既定 "Asia/Tokyo" |
-| status | string | 既定 "ACTIVE"（退会管理用）|
+| status | string | 既定 "ACTIVE"（`PENDING_DELETION` で退会猶予中）|
+| deletionScheduledAt | datetime? | 退会申請時に now+7日 |
 | createdAt / updatedAt | datetime | |
 
-### Goal（目標）
+### Goal（参考書・教科書＝取り組み）
 
 | カラム | 型 | 説明 |
 |---|---|---|
 | id | uuid (PK) | |
 | userId | uuid (FK→User) | |
-| genre | GoalGenre | **マッチングのキー** |
-| title | string | 例「TOEIC 800点」|
-| description | string? | |
+| genre | GoalGenre? | 科目タグ（任意）|
+| title | string | 参考書名。例「システム英単語」|
+| description | string? | 詳細・目標（任意）|
+| totalPages | int? | 総ページ数（任意・進捗バー用）|
+| reportMethod | ReportMethod | 既定 PHOTO |
+| studyMinutes | int? | TIMER方式のときの規定勉強分数 |
+| isPublic | boolean | 既定 true（公開タイムライン・ランキングに反映）|
 | dailyDeadline | string | 既定 "23:59"（JST）|
-| periodStart / periodEnd | date | 取り組み期間（例 8/1〜9/30）|
-| status | GoalStatus | 既定 MATCHING |
+| periodStart / periodEnd | date | 取り組み期間 |
+| status | GoalStatus | 既定 ACTIVE |
 | createdAt | datetime | |
 
-- `@@index([genre, status])` … マッチング探索を高速化。
-- 1ユーザー1ジャンル同時1件（API 層で担保）。
-
-### Match（成立ペア）
-
-| カラム | 型 | 説明 |
-|---|---|---|
-| id | uuid (PK) | |
-| genre | GoalGenre | |
-| userAId / userBId | uuid (FK→User) | ペアの2人 |
-| goalAId / goalBId | uuid (FK→Goal, unique) | 各自の目標（1目標1マッチ）|
-| status | MatchStatus | 既定 ACTIVE |
-| startedAt | date | 進捗判定の起点（通常は成立翌日）|
-| endedAt | date? | |
-| createdAt | datetime | |
+- `@@index([isPublic, createdAt])` … 公開タイムライン抽出用。
+- 同一科目で複数の参考書を並行登録できる（制限なし）。
 
 ### Report（毎日の進捗報告）
 
 | カラム | 型 | 説明 |
 |---|---|---|
 | id | uuid (PK) | |
-| matchId | uuid (FK→Match) | |
-| userId | uuid (FK→User) | |
-| challengeId | uuid? (FK→Challenge) | 成功日数カウントを Challenge に直結 |
+| userId / goalId | uuid (FK) | |
 | reportDate | date | 対象日（JST）|
-| textContent | string | 報告本文 |
-| photoUrl | string? | Supabase Storage の URL |
-| createdAt | datetime | 報告タイムスタンプ（JST）|
+| textContent | string | メモ（任意。未入力は空文字）|
+| pagesRead | int? | その日進めたページ数。**ランキングの基礎** |
+| photoUrl | string? | Supabase Storage（非公開バケット）上のパス。表示時に署名URLを発行 |
+| studiedSeconds | int? | TIMER方式で集中した秒数 |
+| createdAt | datetime | |
 
-- `@@unique([matchId, userId, reportDate])` … **1日1報告**。冪等性の核。
-- 「報告有無のフラグ」= その日に行が存在するか。「成功日数」= 期間内の `COUNT(DISTINCT reportDate)`。
+- `@@unique([goalId, reportDate])` … **1目標1日1報告**。冪等性の核。
+- 「報告有無」= その日に行が存在するか。「連続報告日数」= `src/lib/streak.ts` の `computeStreak`。
 
-### Challenge（デポジット = 決済・返金の管理単位）
-
-ユーザー1人の1チャレンジ（8月）= 1レコード。Stripe の Charge/PaymentIntent と返金計算をここに集約する。
+### Cheer（応援・エール）
 
 | カラム | 型 | 説明 |
 |---|---|---|
 | id | uuid (PK) | |
-| userId | uuid (FK→User) | |
-| startDate / endDate | date | 取り組み期間（例 8/1〜8/30）|
-| durationDays | int | 既定 30 |
-| systemFeeYen | int | 既定 500（返金不可・参加費）|
-| depositYen | int | 既定 3000（日割返金可・返金上限）|
-| totalChargedYen | int | 既定 3500（前払い総額）|
-| dailyForfeitYen | int | 既定 100（サボり1日の失効額）|
-| stripePaymentIntentId | string? (unique) | 前払いの PaymentIntent |
-| stripeChargeId | string? | latest_charge。**返金時に使用**|
-| paymentStatus | ChallengePaymentStatus | 既定 PENDING |
-| paidAt | datetime? | |
-| successDays | int | 報告成功日数（精算時に確定）|
-| refundAmountYen | int | = min(successDays×100, depositYen)|
-| forfeitedYen | int | = depositYen − refundAmountYen |
-| stripeRefundId | string? | |
-| settlementStatus | SettlementStatus | 既定 PENDING |
-| settledAt | datetime? | |
-| status | ChallengeStatus | 既定 AWAITING_PAYMENT |
-| createdAt / updatedAt | datetime | |
+| userId | uuid (FK→User) | 応援した人 |
+| goalId | uuid? (FK→Goal) | 宣言への応援（`goalId`/`reportId`はどちらか一方）|
+| reportId | uuid? (FK→Report) | 進捗への応援 |
+| createdAt | datetime | |
 
-- `@@unique([stripePaymentIntentId])` と `idempotencyKey=refund_<id>` で **二重返金を防止**。
-- `@@index([status, settlementStatus])` … 月末バッチの抽出用。
-
-### WebhookEvent（Stripe Webhook 冪等処理）
-
-`id`（Stripe event id, PK）/ `type` / `processedAt`。重複 Webhook を弾く。
+- `@@unique([userId, goalId])` / `@@unique([userId, reportId])` … 二重応援不可。
 
 ### リレーション概要
 
 ```
-User 1─N Goal
-User 2─(A/B)─ Match ─(A/B)─2 Goal
-User 1─N Challenge        （個人ごとのデポジット）
-Match 1─N Report ─N─1 Challenge
+User 1─N Goal 1─N Report
+User 1─N Cheer ─(goalId?/reportId?)─ Goal / Report
 ```
 
 ---
 
-## 2. コアルート・ロジックの設計
+## 2. コアロジックの設計
 
-### A. マッチングが成立する流れ
+### A. 参考書登録 → 日々の報告
 
-実装: [`src/lib/matching.ts`](../src/lib/matching.ts) / [`src/app/api/goals/route.ts`](../src/app/api/goals/route.ts)
+実装: [`src/app/api/goals/route.ts`](../src/app/api/goals/route.ts) / [`src/app/api/reports/route.ts`](../src/app/api/reports/route.ts)
 
-1. **サインアップ**（`/signup`）: Supabase Auth に登録 → 初回アクセス時に `User` を自動作成し匿名ニックネームを付与（[`src/lib/auth.ts`](../src/lib/auth.ts)）。
-2. **参加 + ¥3,500 前払い**（`POST /api/challenges/enroll`）: Stripe Customer 確保 → `Challenge(AWAITING_PAYMENT)` 作成 → ¥3,500 の PaymentIntent（即時 Capture）→ フロントの Payment Element で confirm → 決済成功（フロー B）で有料会員化。
-3. **目標作成**（`/goals/new` → `POST /api/goals`）: `genre` 等を保存し `status=MATCHING` でプールに入る。
-4. **マッチング探索**（`tryMatchGoal`）:
-   - 同 `genre` ・ `MATCHING` ・自分以外の最古の Goal を1件取得。
-   - **トランザクション内**で両 Goal を条件付き `MATCHING→ACTIVE` 更新（`updateMany` の count が 2 でなければ競合とみなし中断）→ `Match` 作成（`startedAt` = 翌日 JST）。
-   - 相手不在なら `MATCHING` のまま待機。取りこぼしは Cron の `runMatchingSweep` が回収。
-5. **成立後**: ダッシュボード（`/dashboard`）にペア・相手の進捗が表示される。
+1. **サインアップ**（`/signup`）: Supabase Auth に登録 → 初回アクセス時に `User` を自動作成（[`src/lib/auth.ts`](../src/lib/auth.ts)）。email登録はユーザーネームを直接指定、Google/Apple初回はランダムニックネームを付与し `/onboarding` へ誘導。
+2. **参考書登録**（`/goals/new` → `POST /api/goals`）: タイトル・科目・総ページ数・報告方式・取り組み期間を保存し `status=ACTIVE` で作成。
+3. **日々の報告**（`/report` → `POST /api/reports`）: 当日（JST）の `Report` を作成。方式ごとのサーバー側バックストップ（PHOTOは写真必須、TIMERは規定秒数到達必須）。写真は service role で非公開バケットへアップロードしパスのみ保存。`pagesRead` は0〜9999の整数で任意入力、週間ランキングの集計対象になる。
 
-### B. 決済 → 会員アクティブ化（Webhook）
+### B. ランキング算出
 
-実装: [`src/app/api/stripe/webhook/route.ts`](../src/app/api/stripe/webhook/route.ts)
+実装: [`src/lib/ranking.ts`](../src/lib/ranking.ts) / [`src/app/ranking/page.tsx`](../src/app/ranking/page.tsx)
 
-1. 署名検証 → `WebhookEvent` で冪等チェック（重複は即 200）。
-2. `payment_intent.succeeded`（`metadata.kind=enrollment`）: `latest_charge` を `Challenge.stripeChargeId` に保存し、`Challenge` を `PAID/ACTIVE`、`User.paidMember=true` に更新。
-3. `payment_intent.payment_failed`: `Challenge.paymentStatus=FAILED`。
+1. **週間ページ数ランキング**（`weeklyPageRanking`）: 今週（月曜起点、JST）の `Report.pagesRead` を `userId` ごとに `groupBy` で合計し降順ソート。公開（`isPublic`）な取り組みのみ対象。科目（`genre`）で絞り込み可。
+2. **連続報告日数ランキング**（`streakRanking`）: 直近90日分の公開 `Report` を `userId` ごとに集め、[`src/lib/streak.ts`](../src/lib/streak.ts) の `computeStreak` で現在のストリークを算出し降順ソート。
+3. `/ranking` ページで `?metric=pages|streak` と `?subject=<GoalGenre>` により表示を切り替え。ログイン中は自分の順位をハイライト。
 
-### C. 8月末の部分返金（精算バッチ）
+### C. 応援・タイムライン・公開プロフィール
 
-実装: [`src/lib/settlement.ts`](../src/lib/settlement.ts) / [`src/app/api/cron/settlement/route.ts`](../src/app/api/cron/settlement/route.ts) / [`scripts/settle-refunds.ts`](../scripts/settle-refunds.ts)
+実装: [`src/app/api/cheers/route.ts`](../src/app/api/cheers/route.ts) / [`src/lib/cheers.ts`](../src/lib/cheers.ts) / [`src/app/feed/page.tsx`](../src/app/feed/page.tsx) / [`src/app/u/[name]/page.tsx`](../src/app/u/[name]/page.tsx)
 
-**起動**: Vercel Cron が **毎日 00:10 JST（= 15:10 UTC）** に `GET /api/cron/settlement` を叩く（`CRON_SECRET` で保護）。`endDate` を過ぎた `ACTIVE` チャレンジだけが対象になるため、実質「8月末に1回」精算される。
+- `POST /api/cheers` はトグル式（既にあれば削除、無ければ作成）。対象（`goalId` または `reportId` のどちらか一方）は公開のもののみ許可。
+- `/feed` は公開の新着参考書・新着進捗を表示するログイン不要のタイムライン。
+- `/u/[name]` は SNS 共有向けの公開プロフィール（ストリーク・統計・取り組み中の参考書・進捗一覧）。
 
-対象: `status=ACTIVE` ∧ `settlementStatus=PENDING` ∧ `paymentStatus=PAID` ∧ `endDate <= 今日`。
+### D. 退会（ソフトデリート＋猶予期間）
 
-1. **成功日数**: 期間内の `COUNT(DISTINCT reportDate)` を集計。
-2. **返金額**: `refundAmount = min(successDays × 100, depositYen=3000)`、`forfeited = 3000 − refundAmount`。
-3. **返金実行**: `refundAmount > 0` なら `stripe.refunds.create({ payment_intent, amount })` を `idempotencyKey=refund_<challengeId>` で実行 → `REFUDED`。`0` なら Stripe が拒否するため呼ばず `NO_REFUND`。
-4. **確定**: `successDays / refundAmountYen / forfeitedYen / stripeRefundId` を保存し `status=SETTLED`。失敗時は `REFUND_FAILED`（idempotencyKey により再実行しても二重返金なし）。
-5. **冪等性の三重防御**: ① `Challenge.stripePaymentIntentId` の unique ② Stripe `idempotencyKey` ③ `WebhookEvent` 重複排除。
+実装: [`src/lib/account.ts`](../src/lib/account.ts) / [`src/app/api/cron/purge-accounts/route.ts`](../src/app/api/cron/purge-accounts/route.ts)
 
-**Vercel Hobby（60秒上限）対応のページング**: `runSettlement(now, { limit, timeBudgetMs })` が1回の呼び出しを「最大 `SETTLEMENT_PAGE_SIZE` 件＋約50秒」で打ち切る。処理済みは `settlementStatus` が `PENDING` から外れるため、残りは翌日以降の Cron が続きから処理する（オフセット不要・重複なし。`hasMore` で残有無を返却）。手動の `scripts/settle-refunds.ts`（`npm run settle`）は時間無制限で全ページをループし、その場で全件精算する。
+1. 退会申請（`POST /api/account/deactivate`）: `status=PENDING_DELETION`、`deletionScheduledAt=now+7日`（`GRACE_DAYS`）。
+2. 猶予中の取り消し（`POST /api/account/reactivate`）: `status=ACTIVE` に戻す。
+3. **日次バッチ**: Vercel Cron が `GET /api/cron/purge-accounts` を叩き（[`src/lib/cron.ts`](../src/lib/cron.ts) の `CRON_SECRET` で保護）、猶予を過ぎたユーザーを完全削除（ストレージの写真 → DB → Supabase Authユーザーの順）。
 
 ---
 
-## 3. フェーズ別開発ロードマップ（4週間）
+## 3. 画面構成
 
-| 週 | テーマ | 主タスク | 完了条件 |
-|---|---|---|---|
-| **1週目** | 基盤・認証・カード登録 | Next.js+TS+Prisma 初期化／Supabase(DB+Auth+Storage) 接続／`User`・`Goal` スキーマ／匿名サインアップ／Stripe Customer + SetupIntent + Webhook | 登録→カード保存→`cardRegistered=true` が動く |
-| **2週目** | 目標設定 & マッチング | `Match` スキーマ／目標作成 API・UI／マッチングロジック（即時 + Cron スイープ）／ペア成立ダッシュボード | 2アカウントで同ジャンルがペア成立 |
-| **3週目** | 毎日の進捗報告 | `Report` スキーマ／テキスト+写真アップロード(Storage)／報告フォーム・履歴・相手の進捗表示／PWA 化(manifest+SW) | 毎日の報告が保存・表示され、スマホにインストール可 |
-| **4週目** | デポジット決済 & 返金 & リリース | `Challenge` スキーマ／¥3,500 前払い(enroll)／Webhook で会員化／月末の Partial Refund バッチ／E2E テスト／本番デプロイ | 前払い→報告日数に応じた部分返金の一連が通る |
-
-### バッファ / リスク
-
-- **Stripe 本番審査はリードタイムあり** → 1週目に並行申請。
-- 両者未報告時の扱い・返金ポリシー・特商法表記・利用規約・プライバシーポリシーは **法務/運営側の対応が必要**（決済を伴うため必須）。
-- 未成年（大学生）でのカード登録可否、本人同意の取り方を要確認。
+| ルート | 認証 | 内容 |
+|---|---|---|
+| `/` | 公開 | ランディング（週間ランキングのプレビュー付き）|
+| `/signup` | 公開 | サインアップ / ログイン |
+| `/onboarding` | 要ログイン | 初回ユーザーネーム設定 |
+| `/dashboard` | 要ログイン | マイページ（ストリーク・進捗フィード・自分の参考書・ランキング/みんなの進捗への導線）|
+| `/goals/new` | 要ログイン | 参考書登録フォーム |
+| `/report` | 要ログイン | 当日の進捗報告フォーム |
+| `/ranking` | 公開 | 週間ページ数・連続報告日数ランキング（科目フィルタ）|
+| `/feed` | 公開 | みんなの進捗タイムライン |
+| `/u/[name]` | 公開 | 共有プロフィール |
+| `/account` | 要ログイン | アカウント設定・退会 |
 
 ---
 
-## 補足: MVP で意図的に省いた範囲（今後の課題）
+## 補足: 意図的に省いている範囲（今後の課題）
 
 - プッシュ通知（締切前リマインド）→ まずはメール/バナーで代替。
-- マッチング解除・相方の途中離脱時のハンドリング。
 - 通報・ブロック等のモデレーション機能。
-- オフライン対応（Service Worker のキャッシュ戦略）。
+- オフライン対応（Service Worker のキャッシュ戦略、現状は最小限のスタブ）。
+- 月間・全期間などランキングの追加期間軸（現状は週間ページ数＋連続日数の2軸）。
